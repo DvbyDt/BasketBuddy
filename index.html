@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <meta name="theme-color" content="#FF6B35"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <title>BasketBuddy</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="stylesheet" href="css/styles.css?v=3"/>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-top">
+      <div class="brand">Basket<span>Buddy</span> 🛒</div>
+      <div class="location-pill">📍 Dublin, IE</div>
+    </div>
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="Search milk, bread, eggs…" oninput="handleSearch(this.value)"/>
+      <span id="searchClear" style="display:none;cursor:pointer;color:#ccc;font-size:18px;" onclick="clearSearch()">✕</span>
+    </div>
+  </div>
+
+  <!-- PAGES -->
+  <div id="page-compare" class="page active">
+    <div id="searchResults"></div>
+    <div id="compareHome">
+      <br/>
+      <div class="section-title">🔥 Trending Searches</div>
+      <div class="chip-row">
+        <div class="chip" onclick="doSearch('Banana')">🍌 Banana</div>
+        <div class="chip" onclick="doSearch('Carrots')">🥕 Carrots</div>
+        <div class="chip" onclick="doSearch('Bread')">🍞 Bread</div>
+        <div class="chip" onclick="doSearch('Milk')">🥛 Milk</div>
+        <div class="chip" onclick="doSearch('Rice')">🍚 Rice</div>
+        <div class="chip" onclick="doSearch('Apples')">🍎 Apples</div>
+      </div>
+      <div class="section-title">💡 Today's Best Deals</div>
+      <div id="bestDeals"></div>
+    </div>
+  </div>
+
+  <div id="page-basket" class="page">
+    <br/>
+    <div class="section-title">🧺 My Basket</div>
+    <div id="basketItems"></div>
+    <div style="margin-top:16px;">
+      <button class="btn btn-purple" onclick="runOptimizer()">✨ AI Optimize My Basket</button>
+    </div>
+    <div id="optimizerResult" style="margin-top:16px;"></div>
+  </div>
+
+  <div id="page-split" class="page">
+    <br/>
+    <div class="section-title">🧾 Receipt Splitter <span class="ai-badge">✨ AI</span></div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;font-weight:600;">
+      Scan a receipt or add items manually, then assign to yourself or your roommate.
+    </p>
+    <div class="receipt-upload" onclick="document.getElementById('receiptFile').click()">
+      <div class="upload-icon">📷</div>
+      <p>Tap to scan receipt</p>
+      <p style="font-size:11px;margin-top:4px;">AI will extract items automatically</p>
+      <input type="file" id="receiptFile" accept="image/*" style="display:none" onchange="scanReceipt(this)"/>
+    </div>
+    <button class="btn btn-outline" style="width:100%;margin-bottom:16px;justify-content:center;" onclick="openAddSplitItem()">+ Add Item Manually</button>
+    <div id="splitItems"></div>
+    <div id="splitSummary"></div>
+  </div>
+
+  <div id="page-trends" class="page">
+    <br/>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div class="section-title" style="margin:0;">📈 Price Trends</div>
+      <span class="ai-badge">✨ AI Insights</span>
+    </div>
+    <div id="trendsContainer"></div>
+  </div>
+
+  <div id="page-add" class="page">
+    <br/>
+    <div class="section-title">➕ Add Price Data</div>
+    <div class="add-form">
+      <div class="form-row">
+        <label class="form-label">Item Name</label>
+        <input class="form-input" id="addName" placeholder="e.g. Whole Milk"/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Quantity / Weight</label>
+        <input class="form-input" id="addQuantity" placeholder="e.g. 2L, 500g, Pack of 6"/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Category</label>
+        <select class="form-input" id="addCategory">
+          <option>Dairy</option><option>Bakery</option><option>Meat</option>
+          <option>Produce</option><option>Fruits</option><option>Vegetables</option>
+          <option>Grains</option><option>Snacks</option><option>Drinks</option>
+          <option>Frozen</option><option>Other</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Prices by Store (€)</label>
+        <div class="store-price-grid" style="grid-template-columns:1fr 1fr 1fr;">
+          <div>
+            <div class="store-price-label" style="color:var(--tesco)">🔴 Tesco</div>
+            <input class="form-input store-price-input" id="addTesco" type="number" step="0.01" placeholder="0.00"/>
+          </div>
+          <div>
+            <div class="store-price-label" style="color:var(--lidl)">🔵 Lidl</div>
+            <input class="form-input store-price-input" id="addLidl" type="number" step="0.01" placeholder="0.00"/>
+          </div>
+          <div>
+            <div class="store-price-label" style="color:var(--aldi)">🟠 Aldi</div>
+            <input class="form-input store-price-input" id="addAldi" type="number" step="0.01" placeholder="0.00"/>
+          </div>
+        </div>
+        <div class="store-price-grid" style="grid-template-columns:1fr 1fr;margin-top:8px;">
+          <div>
+            <div class="store-price-label" style="color:#9B5DE5">🟣 Asian Supermarket</div>
+            <input class="form-input store-price-input" id="addAsian" type="number" step="0.01" placeholder="0.00"/>
+          </div>
+          <div>
+            <div class="store-price-label" style="color:#06D6A0">🟢 Super Value</div>
+            <input class="form-input store-price-input" id="addSupervalue" type="number" step="0.01" placeholder="0.00"/>
+          </div>
+        </div>
+      </div>
+      <div id="customStoreInputs"></div>
+      <button class="btn btn-outline btn-sm" style="margin-bottom:14px;" onclick="addCustomStoreField()">+ Add another store</button>
+      <button class="btn btn-primary" onclick="saveItem()">💾 Save Item</button>
+    </div>
+    <div class="section-title">🏪 Manage Stores</div>
+    <div id="storeList"></div>
+    <button class="btn btn-outline" style="width:100%;justify-content:center;margin-top:8px;" onclick="openAddStore()">+ Add Custom Store</button>
+  </div>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" onclick="showPage('compare',this)"><span class="icon">🔍</span>Compare</button>
+    <button class="nav-btn" onclick="showPage('basket',this)"><span class="icon">🧺</span>Basket</button>
+    <button class="nav-btn" onclick="showPage('split',this)"><span class="icon">🧾</span>Split</button>
+    <button class="nav-btn" onclick="showPage('trends',this)"><span class="icon">📈</span>Trends</button>
+    <button class="nav-btn" onclick="showPage('add',this)"><span class="icon">➕</span>Add</button>
+  </nav>
+
+  <!-- Modal -->
+  <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+    <div class="modal"><div class="modal-handle"></div><div id="modalContent"></div></div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- JS: load order matters -->
+  <script src="js/data.js?v=3"></script>
+  <script src="js/ui.js?v=3"></script>
+  <script src="js/compare.js?v=3"></script>
+  <script src="js/basket.js?v=3"></script>
+  <script src="js/split.js?v=3"></script>
+  <script src="js/trends.js?v=3"></script>
+  <script src="js/additem.js?v=3"></script>
+  <script src="js/app.js?v=3"></script>
+</body>
+</html>

@@ -1,0 +1,466 @@
+{
+  "stores": [
+    { "id": "tesco", "name": "Tesco", "color": "#EE1C25", "emoji": "🔴" },
+    { "id": "lidl", "name": "Lidl", "color": "#0050AA", "emoji": "🔵" },
+    { "id": "aldi", "name": "Aldi", "color": "#FF6600", "emoji": "🟠" },
+    { "id": "asian", "name": "Asian Supermarket", "color": "#9B5DE5", "emoji": "🟣" },
+    { "id": "supervalue", "name": "Super Value", "color": "#06D6A0", "emoji": "🟢" }
+  ],
+  "items": [
+    {
+      "id": 1, "name": "Watermelon", "quantity": "", "category": "Fruits",
+      "prices": { "lidl": 0.79 },
+      "history": { "lidl": [0.75, 0.76, 0.77, 0.78, 0.79] }
+    },
+    {
+      "id": 2, "name": "Limes", "quantity": "", "category": "Fruits",
+      "prices": { "lidl": 0.79 },
+      "history": { "lidl": [0.75, 0.76, 0.77, 0.78, 0.79] }
+    },
+    {
+      "id": 3, "name": "Kiwi", "quantity": "Pack of 6", "category": "Fruits",
+      "prices": { "lidl": 1.39 },
+      "history": { "lidl": [1.32, 1.34, 1.35, 1.37, 1.39] }
+    },
+    {
+      "id": 4, "name": "Organic Apples", "quantity": "6", "category": "Fruits",
+      "prices": { "lidl": 2.99 },
+      "history": { "lidl": [2.84, 2.88, 2.92, 2.95, 2.99] }
+    },
+    {
+      "id": 5, "name": "Blueberries", "quantity": "150g", "category": "Fruits",
+      "prices": { "lidl": 1.99 },
+      "history": { "lidl": [1.89, 1.92, 1.94, 1.96, 1.99] }
+    },
+    {
+      "id": 6, "name": "Blueberries", "quantity": "500g", "category": "Fruits",
+      "prices": { "tesco": 5.59 },
+      "history": { "tesco": [5.31, 5.38, 5.45, 5.52, 5.59] }
+    },
+    {
+      "id": 7, "name": "Grapes", "quantity": "500g", "category": "Fruits",
+      "prices": { "lidl": 3.29, "tesco": 2.89 },
+      "history": { "lidl": [3.13, 3.17, 3.21, 3.25, 3.29], "tesco": [2.75, 2.79, 2.82, 2.85, 2.89] }
+    },
+    {
+      "id": 8, "name": "Mushrooms", "quantity": "300g", "category": "Vegetables",
+      "prices": { "tesco": 1.29 },
+      "history": { "tesco": [1.23, 1.25, 1.26, 1.27, 1.29] }
+    },
+    {
+      "id": 9, "name": "Sliced Mushrooms", "quantity": "150g", "category": "Vegetables",
+      "prices": { "lidl": 0.95 },
+      "history": { "lidl": [0.9, 0.91, 0.93, 0.94, 0.95] }
+    },
+    {
+      "id": 10, "name": "Scallions / Spring Onions", "quantity": "", "category": "Vegetables",
+      "prices": { "lidl": 0.88, "tesco": 1.39 },
+      "history": { "lidl": [0.84, 0.85, 0.86, 0.87, 0.88], "tesco": [1.32, 1.34, 1.35, 1.37, 1.39] }
+    },
+    {
+      "id": 11, "name": "Broccoli", "quantity": "500g", "category": "Vegetables",
+      "prices": { "lidl": 1.59, "tesco": 1.65 },
+      "history": { "lidl": [1.51, 1.53, 1.55, 1.57, 1.59], "tesco": [1.57, 1.59, 1.61, 1.63, 1.65] }
+    },
+    {
+      "id": 12, "name": "Banana (organic)", "quantity": "6", "category": "Fruits",
+      "prices": { "lidl": 2.35 },
+      "history": { "lidl": [2.23, 2.26, 2.29, 2.32, 2.35] }
+    },
+    {
+      "id": 13, "name": "Banana (funsize)", "quantity": "6", "category": "Fruits",
+      "prices": { "lidl": 1.95 },
+      "history": { "lidl": [1.85, 1.88, 1.9, 1.93, 1.95] }
+    },
+    {
+      "id": 14, "name": "Banana", "quantity": "5", "category": "Fruits",
+      "prices": { "tesco": 1.99 },
+      "history": { "tesco": [1.89, 1.92, 1.94, 1.96, 1.99] }
+    },
+    {
+      "id": 15, "name": "Banana (small)", "quantity": "6", "category": "Fruits",
+      "prices": { "tesco": 1.67 },
+      "history": { "tesco": [1.59, 1.61, 1.63, 1.65, 1.67] }
+    },
+    {
+      "id": 16, "name": "Mixed Peppers", "quantity": "", "category": "Vegetables",
+      "prices": { "lidl": 1.19 },
+      "history": { "lidl": [1.13, 1.15, 1.16, 1.17, 1.19] }
+    },
+    {
+      "id": 17, "name": "Chilli Mix / Mixed Chillies", "quantity": "100g", "category": "Vegetables",
+      "prices": { "lidl": 0.99, "tesco": 0.99 },
+      "history": { "lidl": [0.94, 0.95, 0.96, 0.98, 0.99], "tesco": [0.94, 0.95, 0.96, 0.98, 0.99] }
+    },
+    {
+      "id": 18, "name": "Garden Cucumbers", "quantity": "750g", "category": "Vegetables",
+      "prices": { "lidl": 2.49 },
+      "history": { "lidl": [2.37, 2.4, 2.43, 2.46, 2.49] }
+    },
+    {
+      "id": 19, "name": "Organic Vine Tomatoes", "quantity": "500g", "category": "Vegetables",
+      "prices": { "lidl": 2.49 },
+      "history": { "lidl": [2.37, 2.4, 2.43, 2.46, 2.49] }
+    },
+    {
+      "id": 20, "name": "Carrots", "quantity": "1kg", "category": "Vegetables",
+      "prices": { "lidl": 1.29, "tesco": 1.29 },
+      "history": { "lidl": [1.23, 1.25, 1.26, 1.27, 1.29], "tesco": [1.23, 1.25, 1.26, 1.27, 1.29] }
+    },
+    {
+      "id": 21, "name": "Carrots", "quantity": "750g", "category": "Vegetables",
+      "prices": { "tesco": 1.25 },
+      "history": { "tesco": [1.19, 1.21, 1.22, 1.23, 1.25] }
+    },
+    {
+      "id": 22, "name": "Ginger", "quantity": "100g", "category": "Vegetables",
+      "prices": { "lidl": 0.5 },
+      "history": { "lidl": [0.47, 0.48, 0.48, 0.49, 0.5] }
+    },
+    {
+      "id": 23, "name": "Tesco Carrot Bag", "quantity": "500g", "category": "Vegetables",
+      "prices": { "tesco": 0.79 },
+      "history": { "tesco": [0.75, 0.76, 0.77, 0.78, 0.79] }
+    },
+    {
+      "id": 24, "name": "Ginger", "quantity": "159g", "category": "Vegetables",
+      "prices": { "tesco": 1.19 },
+      "history": { "tesco": [1.13, 1.15, 1.16, 1.17, 1.19] }
+    },
+    {
+      "id": 25, "name": "Red Onions", "quantity": "750g", "category": "Vegetables",
+      "prices": { "lidl": 0.99, "tesco": 1.19 },
+      "history": { "lidl": [0.94, 0.95, 0.96, 0.98, 0.99], "tesco": [1.13, 1.15, 1.16, 1.17, 1.19] }
+    },
+    {
+      "id": 26, "name": "Red Apples", "quantity": "Pack of 6", "category": "Fruits",
+      "prices": { "lidl": 1.99, "tesco": 2.25 },
+      "history": { "lidl": [1.89, 1.92, 1.94, 1.96, 1.99], "tesco": [2.14, 2.17, 2.2, 2.22, 2.25] }
+    },
+    {
+      "id": 27, "name": "Green Apples", "quantity": "Pack of 5 - Tesco / lidi -6", "category": "Fruits",
+      "prices": { "lidl": 1.79, "tesco": 1.79 },
+      "history": { "lidl": [1.7, 1.72, 1.75, 1.77, 1.79], "tesco": [1.7, 1.72, 1.75, 1.77, 1.79] }
+    },
+    {
+      "id": 28, "name": "Pears", "quantity": "7", "category": "Fruits",
+      "prices": { "tesco": 1.39 },
+      "history": { "tesco": [1.32, 1.34, 1.35, 1.37, 1.39] }
+    },
+    {
+      "id": 29, "name": "Coconut", "quantity": "", "category": "Fruits",
+      "prices": { "tesco": 0.79 },
+      "history": { "tesco": [0.75, 0.76, 0.77, 0.78, 0.79] }
+    },
+    {
+      "id": 30, "name": "Oranges", "quantity": "2kg", "category": "Fruits",
+      "prices": { "tesco": 2.49 },
+      "history": { "tesco": [2.37, 2.4, 2.43, 2.46, 2.49] }
+    },
+    {
+      "id": 31, "name": "Oranges", "quantity": "500g", "category": "Fruits",
+      "prices": { "tesco": 0.99 },
+      "history": { "tesco": [0.94, 0.95, 0.96, 0.98, 0.99] }
+    },
+    {
+      "id": 32, "name": "Lemon", "quantity": "Pack of 4", "category": "Fruits",
+      "prices": { "tesco": 1.35 },
+      "history": { "tesco": [1.28, 1.3, 1.31, 1.33, 1.35] }
+    },
+    {
+      "id": 33, "name": "Bread (Brennans 450g)", "quantity": "450g", "category": "Bakery",
+      "prices": { "tesco": 1.89 },
+      "history": { "tesco": [1.8, 1.82, 1.84, 1.87, 1.89] }
+    },
+    {
+      "id": 34, "name": "Coriander", "quantity": "", "category": "Vegetables",
+      "prices": { "tesco": 1.09 },
+      "history": { "tesco": [1.04, 1.05, 1.06, 1.08, 1.09] }
+    },
+    {
+      "id": 35, "name": "Bread (Brennans 500g)", "quantity": "500g", "category": "Bakery",
+      "prices": { "tesco": 2.09 },
+      "history": { "tesco": [1.99, 2.02, 2.04, 2.06, 2.09] }
+    },
+    {
+      "id": 36, "name": "Brennans White Bread", "quantity": "750g", "category": "Bakery",
+      "prices": { "tesco": 1.4 },
+      "history": { "tesco": [1.33, 1.35, 1.36, 1.38, 1.4] }
+    },
+    {
+      "id": 37, "name": "Whole Sandwich Bread", "quantity": "", "category": "Bakery",
+      "prices": { "tesco": 2.0 },
+      "history": { "tesco": [1.9, 1.92, 1.95, 1.98, 2.0] }
+    },
+    {
+      "id": 38, "name": "Sourdough Loaf (Tesco)", "quantity": "600g", "category": "Bakery",
+      "prices": { "tesco": 1.29 },
+      "history": { "tesco": [1.23, 1.25, 1.26, 1.27, 1.29] }
+    },
+    {
+      "id": 39, "name": "Pitta Bread", "quantity": "Pack of 6", "category": "Bakery",
+      "prices": { "tesco": 0.89 },
+      "history": { "tesco": [0.85, 0.86, 0.87, 0.88, 0.89] }
+    },
+    {
+      "id": 40, "name": "Wholemeal Wraps", "quantity": "6", "category": "Bakery",
+      "prices": { "tesco": 1.9 },
+      "history": { "tesco": [1.8, 1.82, 1.85, 1.88, 1.9] }
+    },
+    {
+      "id": 41, "name": "White Tortilla (Mini)", "quantity": "8", "category": "Bakery",
+      "prices": { "tesco": 0.95 },
+      "history": { "tesco": [0.9, 0.91, 0.93, 0.94, 0.95] }
+    },
+    {
+      "id": 42, "name": "Large Burrito Wraps", "quantity": "", "category": "Bakery",
+      "prices": { "tesco": 2.0 },
+      "history": { "tesco": [1.9, 1.92, 1.95, 1.98, 2.0] }
+    },
+    {
+      "id": 43, "name": "Neville Wraps", "quantity": "8", "category": "Bakery",
+      "prices": { "tesco": 1.35 },
+      "history": { "tesco": [1.28, 1.3, 1.31, 1.33, 1.35] }
+    },
+    {
+      "id": 44, "name": "Baby Potato", "quantity": "1kg", "category": "Vegetables",
+      "prices": { "tesco": 1.99 },
+      "history": { "tesco": [1.89, 1.92, 1.94, 1.96, 1.99] }
+    },
+    {
+      "id": 45, "name": "Neville White Wraps", "quantity": "8", "category": "Bakery",
+      "prices": { "tesco": 1.09 },
+      "history": { "tesco": [1.04, 1.05, 1.06, 1.08, 1.09] }
+    },
+    {
+      "id": 46, "name": "Tesco Baby Potato (Irish)", "quantity": "1kg", "category": "Vegetables",
+      "prices": { "tesco": 1.39 },
+      "history": { "tesco": [1.32, 1.34, 1.35, 1.37, 1.39] }
+    },
+    {
+      "id": 47, "name": "Tesco Potato", "quantity": "2kg", "category": "Vegetables",
+      "prices": { "tesco": 4.99 },
+      "history": { "tesco": [4.74, 4.8, 4.87, 4.93, 4.99] }
+    },
+    {
+      "id": 48, "name": "Pomegranate", "quantity": "", "category": "Fruits",
+      "prices": { "tesco": 1.29 },
+      "history": { "tesco": [1.23, 1.25, 1.26, 1.27, 1.29] }
+    },
+    {
+      "id": 49, "name": "Potato", "quantity": "5kg", "category": "Vegetables",
+      "prices": { "tesco": 7.49 },
+      "history": { "tesco": [7.12, 7.21, 7.3, 7.4, 7.49] }
+    },
+    {
+      "id": 50, "name": "Avocado/ organic pack of 2 lidl", "quantity": "", "category": "Fruits",
+      "prices": { "lidl": 2.79, "tesco": 1.69 },
+      "history": { "lidl": [2.65, 2.69, 2.72, 2.75, 2.79], "tesco": [1.61, 1.63, 1.65, 1.67, 1.69] }
+    },
+    {
+      "id": 51, "name": "Green Beans", "quantity": "220g", "category": "Vegetables",
+      "prices": { "tesco": 1.09 },
+      "history": { "tesco": [1.04, 1.05, 1.06, 1.08, 1.09] }
+    },
+    {
+      "id": 52, "name": "Fine Beans", "quantity": "900g", "category": "Vegetables",
+      "prices": { "tesco": 1.05 },
+      "history": { "tesco": [1.0, 1.01, 1.02, 1.04, 1.05] }
+    },
+    {
+      "id": 53, "name": "Cabbage", "quantity": "", "category": "Vegetables",
+      "prices": { "tesco": 1.49 },
+      "history": { "tesco": [1.42, 1.44, 1.46, 1.47, 1.49] }
+    },
+    {
+      "id": 54, "name": "Cauliflower", "quantity": "", "category": "Vegetables",
+      "prices": { "tesco": 1.89 },
+      "history": { "tesco": [1.8, 1.82, 1.84, 1.87, 1.89] }
+    },
+    {
+      "id": 55, "name": "Celery", "quantity": "", "category": "Vegetables",
+      "prices": { "tesco": 1.05 },
+      "history": { "tesco": [1.0, 1.01, 1.02, 1.04, 1.05] }
+    },
+    {
+      "id": 56, "name": "Lettuce (Twin Pack)", "quantity": "", "category": "Vegetables",
+      "prices": { "tesco": 1.35 },
+      "history": { "tesco": [1.28, 1.3, 1.31, 1.33, 1.35] }
+    },
+    {
+      "id": 57, "name": "Yogurt (Greek)", "quantity": "1kg", "category": "Dairy",
+      "prices": { "tesco": 2.2 },
+      "history": { "tesco": [2.09, 2.12, 2.15, 2.17, 2.2] }
+    },
+    {
+      "id": 58, "name": "Whole Milk (Tetra Pack)", "quantity": "1L", "category": "Dairy",
+      "prices": { "supervalue": 1.25, "tesco": 1.25 },
+      "history": { "supervalue": [1.19, 1.21, 1.22, 1.23, 1.25], "tesco": [1.19, 1.21, 1.22, 1.23, 1.25] }
+    },
+    {
+      "id": 59, "name": "Fresh Milk (Tesco)", "quantity": "1L", "category": "Dairy",
+      "prices": { "tesco": 1.59 },
+      "history": { "tesco": [1.51, 1.53, 1.55, 1.57, 1.59] }
+    },
+    {
+      "id": 60, "name": "Low Spread Butter", "quantity": "454g", "category": "Dairy",
+      "prices": { "tesco": 2.5 },
+      "history": { "tesco": [2.38, 2.41, 2.44, 2.47, 2.5] }
+    },
+    {
+      "id": 61, "name": "Peas", "quantity": "1kg", "category": "Vegetables",
+      "prices": { "tesco": 1.4 },
+      "history": { "tesco": [1.33, 1.35, 1.36, 1.38, 1.4] }
+    },
+    {
+      "id": 62, "name": "Basmati Rice", "quantity": "1kg", "category": "Grains",
+      "prices": { "tesco": 1.59 },
+      "history": { "tesco": [1.51, 1.53, 1.55, 1.57, 1.59] }
+    },
+    {
+      "id": 63, "name": "Long Grain Rice", "quantity": "2kg", "category": "Grains",
+      "prices": { "tesco": 2.95 },
+      "history": { "tesco": [2.8, 2.84, 2.88, 2.91, 2.95] }
+    },
+    {
+      "id": 64, "name": "Boil Bag Basmati Rice", "quantity": "125g", "category": "Grains",
+      "prices": { "tesco": 0.95 },
+      "history": { "tesco": [0.9, 0.91, 0.93, 0.94, 0.95] }
+    },
+    {
+      "id": 65, "name": "Wholemeal Flour", "quantity": "2kg", "category": "Grains",
+      "prices": { "tesco": 1.59 },
+      "history": { "tesco": [1.51, 1.53, 1.55, 1.57, 1.59] }
+    },
+    {
+      "id": 66, "name": "Pillsbury Atta", "quantity": "5kg", "category": "Grains",
+      "prices": { "asian": 9.99 },
+      "history": { "asian": [9.49, 9.62, 9.74, 9.87, 9.99] }
+    },
+    {
+      "id": 67, "name": "Ashirwaad Atta", "quantity": "5kg", "category": "Grains",
+      "prices": { "asian": 11.99 },
+      "history": { "asian": [11.39, 11.54, 11.69, 11.84, 11.99] }
+    },
+    {
+      "id": 68, "name": "Chandini Roti", "quantity": "20 pieces", "category": "Bakery",
+      "prices": { "asian": 3.99 },
+      "history": { "asian": [3.79, 3.84, 3.89, 3.94, 3.99] }
+    },
+    {
+      "id": 69, "name": "Pears funsize", "quantity": "750g", "category": "Fruits",
+      "prices": { "lidl": 1.29 },
+      "history": { "lidl": [1.23, 1.25, 1.26, 1.27, 1.29] }
+    },
+    {
+      "id": 70, "name": "Kiwi", "quantity": "Pack of 6", "category": "Fruits",
+      "prices": { "lidl": 1.39 },
+      "history": { "lidl": [1.32, 1.34, 1.35, 1.37, 1.39] }
+    },
+    {
+      "id": 71, "name": "Funsize carrots", "quantity": "200g", "category": "Vegetables",
+      "prices": { "lidl": 0.99 },
+      "history": { "lidl": [0.94, 0.95, 0.96, 0.98, 0.99] }
+    },
+    {
+      "id": 72, "name": "Garlic", "quantity": "400g", "category": "Other",
+      "prices": { "lidl": 1.39 },
+      "history": { "lidl": [1.32, 1.34, 1.35, 1.37, 1.39] }
+    },
+    {
+      "id": 73, "name": "Garlic", "quantity": "200g", "category": "Other",
+      "prices": { "lidl": 1.19 },
+      "history": { "lidl": [1.13, 1.15, 1.16, 1.17, 1.19] }
+    },
+    {
+      "id": 74, "name": "Onion", "quantity": "1kg", "category": "Other",
+      "prices": { "lidl": 1.19 },
+      "history": { "lidl": [1.13, 1.15, 1.16, 1.17, 1.19] }
+    },
+    {
+      "id": 75, "name": "Coriander", "quantity": "30g", "category": "Other",
+      "prices": { "lidl": 0.99 },
+      "history": { "lidl": [0.94, 0.95, 0.96, 0.98, 0.99] }
+    },
+    {
+      "id": 76, "name": "Cucumber organic", "quantity": "1", "category": "Other",
+      "prices": { "lidl": 1.39 },
+      "history": { "lidl": [1.32, 1.34, 1.35, 1.37, 1.39] }
+    },
+    {
+      "id": 77, "name": "Rowan hill tortilla wraps", "quantity": "6", "category": "Other",
+      "prices": { "lidl": 1.35 },
+      "history": { "lidl": [1.28, 1.3, 1.31, 1.33, 1.35] }
+    },
+    {
+      "id": 78, "name": "Rowan hill tortilla wraps", "quantity": "8", "category": "Other",
+      "prices": { "lidl": 1.09 },
+      "history": { "lidl": [1.04, 1.05, 1.06, 1.08, 1.09] }
+    },
+    {
+      "id": 79, "name": "Cornell bakery brown pan bread", "quantity": "500g", "category": "Other",
+      "prices": { "lidl": 0.95 },
+      "history": { "lidl": [0.9, 0.91, 0.93, 0.94, 0.95] }
+    },
+    {
+      "id": 80, "name": "Greek style yogurt", "quantity": "500g", "category": "Other",
+      "prices": { "lidl": 0.99 },
+      "history": { "lidl": [0.94, 0.95, 0.96, 0.98, 0.99] }
+    },
+    {
+      "id": 81, "name": "Greek style yogurt", "quantity": "1kg", "category": "Other",
+      "prices": { "lidl": 1.69 },
+      "history": { "lidl": [1.61, 1.63, 1.65, 1.67, 1.69] }
+    },
+    {
+      "id": 82, "name": "French fries", "quantity": "1kg", "category": "Other",
+      "prices": { "lidl": 1.39 },
+      "history": { "lidl": [1.32, 1.34, 1.35, 1.37, 1.39] }
+    },
+    {
+      "id": 83, "name": "Cork flakes", "quantity": "450g", "category": "Other",
+      "prices": { "lidl": 3.15 },
+      "history": { "lidl": [2.99, 3.03, 3.07, 3.11, 3.15] }
+    },
+    {
+      "id": 84, "name": "Crownflield corn flakes", "quantity": "500g", "category": "Other",
+      "prices": { "lidl": 1.19 },
+      "history": { "lidl": [1.13, 1.15, 1.16, 1.17, 1.19] }
+    },
+    {
+      "id": 85, "name": "Indian party time snack selection  2 for 4", "quantity": "2kg", "category": "Other",
+      "prices": { "lidl": 4.0 },
+      "history": { "lidl": [3.8, 3.85, 3.9, 3.95, 4.0] }
+    },
+    {
+      "id": 86, "name": "Sweetcorn", "quantity": "1kg", "category": "Other",
+      "prices": { "lidl": 1.29 },
+      "history": { "lidl": [1.23, 1.25, 1.26, 1.27, 1.29] }
+    },
+    {
+      "id": 87, "name": "Mixed vegetable packed", "quantity": "1kg", "category": "Other",
+      "prices": { "lidl": 0.99 },
+      "history": { "lidl": [0.94, 0.95, 0.96, 0.98, 0.99] }
+    },
+    {
+      "id": 88, "name": "Cien shower gel", "quantity": "500ml", "category": "Other",
+      "prices": { "lidl": 1.69 },
+      "history": { "lidl": [1.61, 1.63, 1.65, 1.67, 1.69] }
+    },
+    {
+      "id": 89, "name": "Cien lavander shower gel", "quantity": "500ml", "category": "Other",
+      "prices": { "lidl": 1.29 },
+      "history": { "lidl": [1.23, 1.25, 1.26, 1.27, 1.29] }
+    },
+    {
+      "id": 90, "name": "Vitamin d - minavit", "quantity": "90", "category": "Other",
+      "prices": { "lidl": 1.99 },
+      "history": { "lidl": [1.89, 1.92, 1.94, 1.96, 1.99] }
+    },
+    {
+      "id": 91, "name": "Multivitamins effervescent", "quantity": "90g", "category": "Other",
+      "prices": { "lidl": 1.45 },
+      "history": { "lidl": [1.38, 1.4, 1.42, 1.43, 1.45] }
+    }
+  ]
+}

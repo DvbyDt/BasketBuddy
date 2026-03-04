@@ -1,6 +1,6 @@
 {
-  "name": "BasketBuddy",
-  "short_name": "BasketBuddy",
+  "name": "GroceryMate Dublin",
+  "short_name": "GroceryMate",
   "description": "Compare grocery prices across Dublin stores",
   "start_url": "/index.html",
   "display": "standalone",

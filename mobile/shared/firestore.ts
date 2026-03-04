@@ -1,5 +1,5 @@
 // ─── Firestore cloud sync for custom items & basket ─────────────
-import { db } from './firebase';
+import { db, ensureAuth, getCurrentUid } from './firebase';
 import {
   collection,
   doc,
@@ -16,11 +16,13 @@ import type { Item, BasketItem } from './types';
 // ────────────────────────── Custom Items ──────────────────────────
 const customItemsCol = collection(db, 'customItems');
 
-/** Push a custom item to Firestore */
+/** Push a custom item to Firestore (with auth) */
 export async function syncCustomItemToCloud(item: Item): Promise<void> {
+  const uid = await ensureAuth();
   try {
     await setDoc(doc(customItemsCol, String(item.id)), {
       ...item,
+      createdBy: uid,
       updatedAt: Date.now(),
     });
   } catch (e) {
@@ -63,11 +65,13 @@ export function subscribeToCustomItems(
 // ────────────────────────── Basket ────────────────────────────────
 const basketCol = collection(db, 'sharedBasket');
 
-/** Push a basket item to Firestore */
+/** Push a basket item to Firestore (with auth) */
 export async function syncBasketItemToCloud(item: BasketItem): Promise<void> {
+  const uid = await ensureAuth();
   try {
     await setDoc(doc(basketCol, String(item.itemId)), {
       ...item,
+      addedBy: uid,
       updatedAt: Date.now(),
     });
   } catch (e) {

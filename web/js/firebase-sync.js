@@ -15,15 +15,37 @@ const firebaseConfig = {
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const fbAuth = firebase.auth();
+
+// ─── Anonymous Auth ──────────────────────────────────────────────
+let _fbUid = null;
+const _fbAuthReady = new Promise((resolve) => {
+  fbAuth.onAuthStateChanged(user => {
+    if (user) {
+      _fbUid = user.uid;
+      resolve(user.uid);
+    } else {
+      fbAuth.signInAnonymously().catch(e => console.warn('[Auth] anon sign-in failed:', e));
+    }
+  });
+});
+
+async function ensureWebAuth() {
+  if (_fbUid) return _fbUid;
+  return _fbAuthReady;
+}
 
 // ──── Custom Items Cloud Sync ────────────────────────────────────
 
 /** Push a custom item to Firestore */
 function syncCustomItemToCloud(item) {
-  db.collection('customItems').doc(String(item.id)).set({
-    ...item,
-    updatedAt: Date.now(),
-  }).catch(e => console.warn('[Firestore] sync error:', e));
+  ensureWebAuth().then(uid => {
+    db.collection('customItems').doc(String(item.id)).set({
+      ...item,
+      createdBy: uid,
+      updatedAt: Date.now(),
+    }).catch(e => console.warn('[Firestore] sync error:', e));
+  });
 }
 
 /** Remove a custom item from Firestore */
@@ -72,10 +94,13 @@ function loadCustomItemsFromCloud() {
 // ──── Basket Cloud Sync ──────────────────────────────────────────
 
 function syncBasketItemToCloud(item) {
-  db.collection('sharedBasket').doc(String(item.id || item.name)).set({
-    ...item,
-    updatedAt: Date.now(),
-  }).catch(e => console.warn('[Firestore] basket sync error:', e));
+  ensureWebAuth().then(uid => {
+    db.collection('sharedBasket').doc(String(item.id || item.name)).set({
+      ...item,
+      addedBy: uid,
+      updatedAt: Date.now(),
+    }).catch(e => console.warn('[Firestore] basket sync error:', e));
+  });
 }
 
 function removeBasketItemFromCloud(itemName) {

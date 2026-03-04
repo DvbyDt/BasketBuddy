@@ -8,6 +8,17 @@ BasketBuddy helps you save money on every grocery shop by comparing prices acros
 
 ---
 
+## 📲 Download
+
+| Platform | Link |
+|----------|------|
+| 🌐 **Web App** | [dvbydt.github.io/BasketBuddy](https://dvbydt.github.io/BasketBuddy/) |
+| 🤖 **Android APK** | [Download BasketBuddy.apk](https://github.com/DvbyDt/BasketBuddy/releases/latest/download/BasketBuddy.apk) |
+
+> **Android install:** Download the APK → open it on your phone → allow "Install from unknown sources" → tap Install. No Play Store needed!
+
+---
+
 ## ✨ Features
 
 | Feature | Web | Mobile |

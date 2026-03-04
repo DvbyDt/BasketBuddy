@@ -1,5 +1,5 @@
 // ─── js/basket.js ────────────────────────────────────────────────
-// Manages the shopping basket and AI basket optimizer.
+// Shopping basket + AI-powered optimizer using Groq (free).
 
 function addToBasket(itemId) {
   const item = items.find(i => i.id === itemId);
@@ -60,19 +60,26 @@ async function runOptimizer() {
     storeGroups[b.store].push(b);
   });
 
-  const totalCheapest = basket.reduce((s, b) => s + b.price, 0);
-  // Compare vs buying everything at most expensive available store
-  const totalExpensive = basket.reduce((s, b) => {
+  const totalCheapest   = basket.reduce((s, b) => s + b.price, 0);
+  const totalExpensive  = basket.reduce((s, b) => {
     const item = items.find(i => i.id === b.itemId);
     if (!item) return s + b.price;
-    const storePrices = stores.map(st => item.prices[st.id]).filter(p => p != null);
-    return s + (storePrices.length ? Math.max(...storePrices) : b.price);
+    const ps = stores.map(st => item.prices[st.id]).filter(p => p != null);
+    return s + (ps.length ? Math.max(...ps) : b.price);
   }, 0);
   const saving = totalExpensive - totalCheapest;
 
-  await new Promise(r => setTimeout(r, 1000)); // Simulate AI thinking
+  // Try to get an AI insight tip
+  let aiTip = '';
+  try {
+    const summary = basket.map(b => `${b.name} €${b.price} at ${b.store}`).join(', ');
+    aiTip = await getBasketInsight(summary);
+  } catch (e) {
+    // Silently skip if no AI key
+  }
 
   const activeGroups = Object.entries(storeGroups).filter(([, v]) => v.length);
+
   el.innerHTML = `<div class="optimizer-card">
     <h3>✨ AI Basket Plan</h3>
     ${activeGroups.map(([sid, its]) => {
@@ -85,5 +92,6 @@ async function runOptimizer() {
       </div>`;
     }).join('')}
     <div class="savings-pill">💚 You save ${fmt(saving)} by shopping smart!</div>
+    ${aiTip ? `<div style="margin-top:12px;background:rgba(255,255,255,0.15);border-radius:10px;padding:10px;font-size:13px;font-weight:700;">🤖 ${aiTip}</div>` : ''}
   </div>`;
 }

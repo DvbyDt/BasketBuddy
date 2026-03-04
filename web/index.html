@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <meta name="theme-color" content="#FF6B35"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <title>BasketBuddy</title>
+  <title>GroceryMate Dublin</title>
   <link rel="manifest" href="manifest.json"/>
-  <link rel="stylesheet" href="css/styles.css?v=3"/>
+  <link rel="stylesheet" href="css/styles.css?v=6"/>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 </head>
 <body>
@@ -16,7 +16,10 @@
   <div class="header">
     <div class="header-top">
       <div class="brand">Basket<span>Buddy</span> 🛒</div>
-      <div class="location-pill">📍 Dublin, IE</div>
+      <div class="header-right">
+        <div class="ai-status-pill admin-only" id="aiStatusPill" onclick="showAISettings()" style="display:none">⚡ AI Ready</div>
+        <div class="location-pill">📍 Dublin, IE</div>
+      </div>
     </div>
     <div class="search-bar">
       <span class="search-icon">🔍</span>
@@ -39,6 +42,17 @@
         <div class="chip" onclick="doSearch('Rice')">🍚 Rice</div>
         <div class="chip" onclick="doSearch('Apples')">🍎 Apples</div>
       </div>
+
+      <!-- Scraper Status Card (admin only) -->
+      <div class="scraper-card admin-only" id="scraperCard" style="display:none">
+        <div class="scraper-header">
+          <span>🤖 Price Scraper</span>
+          <span class="scraper-status" id="scraperStatus">Idle</span>
+        </div>
+        <div class="scraper-meta" id="scraperMeta">Last updated: Never — run scraper to fetch live prices</div>
+        <button class="btn btn-sm btn-outline" style="margin-top:8px;" onclick="showScraperInfo()">How to update prices →</button>
+      </div>
+
       <div class="section-title">💡 Today's Best Deals</div>
       <div id="bestDeals"></div>
     </div>
@@ -56,15 +70,15 @@
 
   <div id="page-split" class="page">
     <br/>
-    <div class="section-title">🧾 Receipt Splitter <span class="ai-badge">✨ AI</span></div>
+    <div class="section-title">🧾 Receipt Splitter</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:16px;font-weight:600;">
-      Scan a receipt or add items manually, then assign to yourself or your roommate.
+      Split your grocery bill with your roommate or housemates. Add items below, then assign each one to see who owes what.
     </p>
-    <div class="receipt-upload" onclick="document.getElementById('receiptFile').click()">
-      <div class="upload-icon">📷</div>
-      <p>Tap to scan receipt</p>
-      <p style="font-size:11px;margin-top:4px;">AI will extract items automatically</p>
-      <input type="file" id="receiptFile" accept="image/*" style="display:none" onchange="scanReceipt(this)"/>
+    <div style="background:linear-gradient(135deg,#FFF3E0,#FFF8F0);border-radius:14px;padding:16px;margin-bottom:16px;border:1.5px dashed #FFB74D;">
+      <div style="font-size:14px;font-weight:800;color:#E65100;margin-bottom:6px;">📷 Receipt Scanning — Coming Soon!</div>
+      <div style="font-size:12px;font-weight:600;color:#BF360C;line-height:1.6;">
+        We're actively working on an exciting update that will let you snap a photo of your receipt and have AI automatically extract all items and prices for you — no manual entry needed! Stay tuned for this feature in a future update.
+      </div>
     </div>
     <button class="btn btn-outline" style="width:100%;margin-bottom:16px;justify-content:center;" onclick="openAddSplitItem()">+ Add Item Manually</button>
     <div id="splitItems"></div>
@@ -77,6 +91,8 @@
       <div class="section-title" style="margin:0;">📈 Price Trends</div>
       <span class="ai-badge">✨ AI Insights</span>
     </div>
+    <!-- Category filter -->
+    <div class="chip-row" id="trendCategoryFilter" style="margin-bottom:12px;"></div>
     <div id="trendsContainer"></div>
   </div>
 
@@ -132,6 +148,28 @@
       <button class="btn btn-outline btn-sm" style="margin-bottom:14px;" onclick="addCustomStoreField()">+ Add another store</button>
       <button class="btn btn-primary" onclick="saveItem()">💾 Save Item</button>
     </div>
+
+    <!-- AI Settings (admin only) -->
+    <div class="section-title admin-only" style="display:none">🤖 AI Settings</div>
+    <div class="add-form admin-only" style="display:none">
+      <div class="form-row">
+        <label class="form-label">AI Provider</label>
+        <select class="form-input" id="aiProvider" onchange="onAIProviderChange()">
+          <option value="groq">Groq (Free — recommended)</option>
+          <option value="anthropic">Anthropic Claude (Paid)</option>
+          <option value="none">No AI</option>
+        </select>
+      </div>
+      <div class="form-row" id="aiKeyRow">
+        <label class="form-label" id="aiKeyLabel">Groq API Key (free at console.groq.com)</label>
+        <input class="form-input" id="aiApiKey" type="password" placeholder="gsk_..."/>
+      </div>
+      <div id="aiKeyHelp" style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:12px;padding:10px;background:#F8F8F8;border-radius:10px;">
+        💡 <strong>Groq is completely free</strong> — sign up at console.groq.com, create an API key, paste it above. No credit card needed. Powers receipt scanning and basket AI.
+      </div>
+      <button class="btn btn-primary" onclick="saveAISettings()">💾 Save AI Settings</button>
+    </div>
+
     <div class="section-title">🏪 Manage Stores</div>
     <div id="storeList"></div>
     <button class="btn btn-outline" style="width:100%;justify-content:center;margin-top:8px;" onclick="openAddStore()">+ Add Custom Store</button>
@@ -143,7 +181,7 @@
     <button class="nav-btn" onclick="showPage('basket',this)"><span class="icon">🧺</span>Basket</button>
     <button class="nav-btn" onclick="showPage('split',this)"><span class="icon">🧾</span>Split</button>
     <button class="nav-btn" onclick="showPage('trends',this)"><span class="icon">📈</span>Trends</button>
-    <button class="nav-btn" onclick="showPage('add',this)"><span class="icon">➕</span>Add</button>
+    <button class="nav-btn" onclick="showPage('add',this)"><span class="icon">⚙️</span>Settings</button>
   </nav>
 
   <!-- Modal -->
@@ -154,14 +192,21 @@
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
-  <!-- JS: load order matters -->
-  <script src="js/data.js?v=3"></script>
-  <script src="js/ui.js?v=3"></script>
-  <script src="js/compare.js?v=3"></script>
-  <script src="js/basket.js?v=3"></script>
-  <script src="js/split.js?v=3"></script>
-  <script src="js/trends.js?v=3"></script>
-  <script src="js/additem.js?v=3"></script>
-  <script src="js/app.js?v=3"></script>
+  <!-- JS -->
+  <script src="js/data.js?v=6"></script>
+  <script src="js/ui.js?v=6"></script>
+  <script src="js/ai.js?v=6"></script>
+  <script src="js/compare.js?v=6"></script>
+  <script src="js/basket.js?v=6"></script>
+  <script src="js/split.js?v=6"></script>
+  <script src="js/trends.js?v=6"></script>
+  <script src="js/additem.js?v=6"></script>
+  <script src="js/app.js?v=6"></script>
+  <script>
+    // Show admin-only elements when ?admin=1 is in the URL
+    if (new URLSearchParams(window.location.search).get('admin') === '1') {
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
+    }
+  </script>
 </body>
 </html>

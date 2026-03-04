@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "BasketBuddy",
+    "slug": "basketbuddy",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "basketbuddy",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#FFF9F0",
+      "resizeMode": "contain"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FF6B35"
+      },
+      "package": "com.dvbydt.basketbuddy"
+    },
+    "ios": {
+      "bundleIdentifier": "com.dvbydt.basketbuddy",
+      "supportsTablet": true
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

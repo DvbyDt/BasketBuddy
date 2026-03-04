@@ -29,7 +29,7 @@ function setSplitOwner(idx, owner) {
 function updateSplitSummary() {
   let myTotal = 0, theirTotal = 0;
   splitItems.forEach(i => {
-    if (i.owner === 'me')       myTotal    += i.price;
+    if (i.owner === 'me')        myTotal    += i.price;
     else if (i.owner === 'them') theirTotal += i.price;
     else { myTotal += i.price / 2; theirTotal += i.price / 2; }
   });
@@ -68,9 +68,8 @@ function saveSplitItem() {
   renderSplit();
 }
 
-// ── AI Receipt Scanner ─────────────────────────────────────────
-// Sends the receipt image to Claude via the Anthropic API.
-// Falls back to demo data if the API is unreachable (e.g. local dev).
+// ── AI Receipt Scanner ────────────────────────────────────────────
+
 async function scanReceipt(input) {
   if (!input.files[0]) return;
   const file = input.files[0];
@@ -93,41 +92,39 @@ async function scanReceipt(input) {
   const mediaType = file.type || 'image/jpeg';
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-            {
-              type: 'text',
-              text: 'Extract all grocery items and their prices from this receipt. Return ONLY a JSON array like: [{"name":"Item name","price":1.99}]. No preamble, no markdown backticks.'
-            }
-          ]
-        }]
-      })
-    });
-
-    const data  = await response.json();
-    const text  = data.content.map(c => c.text || '').join('');
-    const clean = text.replace(/```json|```/g, '').trim();
+    const text   = await callAnthropicVision(base64, mediaType);
+    const clean  = text.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
-    splitItems = parsed.map(p => ({ name: p.name, price: parseFloat(p.price) || 0, owner: 'shared' }));
+    splitItems   = parsed.map(p => ({ name: p.name, price: parseFloat(p.price) || 0, owner: 'shared' }));
     renderSplit();
     showToast(`✅ Extracted ${splitItems.length} items!`);
+
   } catch (e) {
-    // Demo fallback for local development (no API key in browser)
-    splitItems = [
-      { name: 'Whole Milk 2L',    price: 1.15, owner: 'shared' },
-      { name: 'Large Eggs 6pk',   price: 1.49, owner: 'shared' },
-      { name: 'Sliced Pan',       price: 0.89, owner: 'shared' },
-      { name: 'Cheddar Cheese',   price: 2.69, owner: 'shared' },
-    ];
-    renderSplit();
-    showToast('📄 Demo receipt loaded (deploy with API key for real scanning)');
+    if (e.message === 'NO_AI_KEY') {
+      showToast('⚙️ Add an Anthropic API key in Settings for receipt scanning');
+      // Load demo data
+      splitItems = [
+        { name: 'Whole Milk 2L',    price: 1.15, owner: 'shared' },
+        { name: 'Large Eggs 6pk',   price: 1.49, owner: 'shared' },
+        { name: 'Sliced Pan',       price: 0.89, owner: 'shared' },
+        { name: 'Cheddar Cheese',   price: 2.69, owner: 'shared' },
+      ];
+      renderSplit();
+      showToast('📄 Demo receipt loaded — add Anthropic key for real scanning');
+    } else if (e.message === 'GROQ_NO_VISION') {
+      showToast('📷 Receipt scanning needs Anthropic key (Groq has no vision). Add in Settings.');
+      splitItems = [
+        { name: 'Whole Milk 2L',    price: 1.15, owner: 'shared' },
+        { name: 'Large Eggs 6pk',   price: 1.49, owner: 'shared' },
+        { name: 'Sliced Pan',       price: 0.89, owner: 'shared' },
+        { name: 'Cheddar Cheese',   price: 2.69, owner: 'shared' },
+      ];
+      renderSplit();
+    } else {
+      console.error('Receipt scan error:', e);
+      showToast('❌ Scan failed: ' + e.message);
+      document.getElementById('splitItems').innerHTML = `
+        <div class="empty-state"><div class="e-icon">❌</div><p>Scan failed.<br/>Try adding items manually.</p></div>`;
+    }
   }
 }

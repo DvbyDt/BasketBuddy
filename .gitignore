@@ -1,4 +1,29 @@
-*.csv
-*.py
+# OS
 .DS_Store
+
+# Dependencies
 node_modules/
+.venv/
+
+# Scraper
+scraper/*.csv
+scraper/.env
+scraper/query_cache.json
+
+# Expo / React Native
+mobile/.expo/
+mobile/dist/
+mobile/android/
+mobile/ios/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Build
+*.tsbuildinfo
+
+# Misc
+*.log

@@ -334,3 +334,27 @@ h1, .brand { font-family: 'Fredoka One', cursive; }
 
 .loading-box { text-align: center; padding: 24px; font-weight: 700; color: var(--muted); }
 .loading-box p { margin-top: 10px; font-size: 13px; }
+
+/* ─── New additions v4 ───────────────────────────── */
+.header-right { display: flex; align-items: center; gap: 8px; }
+.ai-status-pill {
+  background: rgba(255,255,255,0.2);
+  border-radius: 20px; padding: 4px 10px;
+  font-size: 11px; font-weight: 800; cursor: pointer; transition: all 0.2s;
+}
+.ai-status-pill:active { transform: scale(0.95); }
+.scraper-card {
+  background: white; border-radius: 16px; padding: 14px 16px;
+  margin-bottom: 16px; box-shadow: var(--shadow);
+  border-left: 4px solid var(--orange);
+}
+.scraper-header {
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: 800; font-size: 14px; margin-bottom: 4px;
+}
+.scraper-status { font-size: 12px; font-weight: 700; color: var(--muted); }
+.scraper-meta   { font-size: 12px; color: var(--muted); font-weight: 600; }
+code {
+  font-family: 'Courier New', monospace;
+  line-height: 1.8;
+}

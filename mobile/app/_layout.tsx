@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Animated, StyleSheet, Dimensions } from 'react-native';
 import { Stack } from 'expo-router';
+import { BasketProvider } from '../shared/BasketContext';
 
 const { width } = Dimensions.get('window');
 
@@ -131,9 +132,11 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tabs)" />
-    </Stack>
+    <BasketProvider>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+    </BasketProvider>
   );
 }
 

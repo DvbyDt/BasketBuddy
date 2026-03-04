@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Item, getCheapestStore, getItemPrices, fmt, getSavings } from '../shared/store';
 import { StoreBadge } from './StoreBadge';
 import { COLORS, SHADOWS } from '../shared/theme';
+import { useBasket } from '../shared/BasketContext';
 
 interface Props {
   item: Item;
@@ -14,6 +15,8 @@ export function PriceCard({ item, onPress, showAllPrices = false }: Props) {
   const cheapest = getCheapestStore(item);
   const saving = getSavings(item);
   const prices = getItemPrices(item);
+  const { addToBasket, isInBasket } = useBasket();
+  const inBasket = isInBasket(item.id);
 
   if (!cheapest) return null;
 
@@ -58,11 +61,30 @@ export function PriceCard({ item, onPress, showAllPrices = false }: Props) {
           <Text style={[styles.bestPrice, { color: COLORS.green }]}>
             {fmt(cheapest.price)}
           </Text>
-          {saving > 0 && (
-            <View style={styles.savingPill}>
-              <Text style={styles.savingText}>Save {fmt(saving)}</Text>
-            </View>
-          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {saving > 0 && (
+              <View style={styles.savingPill}>
+                <Text style={styles.savingText}>Save {fmt(saving)}</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={[
+                styles.addBasketBtn,
+                inBasket && styles.addBasketBtnDone,
+              ]}
+              onPress={() => addToBasket(item)}
+              disabled={inBasket}
+            >
+              <Text
+                style={[
+                  styles.addBasketText,
+                  inBasket && styles.addBasketTextDone,
+                ]}
+              >
+                {inBasket ? '✓ Added' : '+ Basket'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </TouchableOpacity>
@@ -130,5 +152,22 @@ const styles = StyleSheet.create({
     color: COLORS.green,
     fontWeight: '800',
     fontSize: 12,
+  },
+  addBasketBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  addBasketBtnDone: {
+    backgroundColor: COLORS.savingBg,
+  },
+  addBasketText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  addBasketTextDone: {
+    color: COLORS.green,
   },
 });

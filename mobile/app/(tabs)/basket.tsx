@@ -12,27 +12,14 @@ import { COLORS, SHADOWS } from '../../shared/theme';
 import {
   items,
   stores,
-  getCheapestStore,
   getStoreById,
   fmt,
-  Item,
 } from '../../shared/store';
 import { StoreBadge } from '../../components/StoreBadge';
-
-interface BasketItem {
-  itemId: number;
-  name: string;
-  quantity: string;
-  store: string;
-  price: number;
-}
+import { useBasket } from '../../shared/BasketContext';
 
 export default function BasketScreen() {
-  const [basket, setBasket] = useState<BasketItem[]>([]);
-
-  const removeItem = (itemId: number) => {
-    setBasket(prev => prev.filter(b => b.itemId !== itemId));
-  };
+  const { basket, removeFromBasket, clearBasket } = useBasket();
 
   const total = basket.reduce((s, b) => s + b.price, 0);
 
@@ -47,7 +34,7 @@ export default function BasketScreen() {
   };
 
   // Group basket by store
-  const storeGroups: Record<string, BasketItem[]> = {};
+  const storeGroups: Record<string, typeof basket> = {};
   basket.forEach(b => {
     if (!storeGroups[b.store]) storeGroups[b.store] = [];
     storeGroups[b.store].push(b);
@@ -102,7 +89,7 @@ export default function BasketScreen() {
                   </Text>
                 </View>
                 <Text style={styles.itemPrice}>{fmt(b.price)}</Text>
-                <TouchableOpacity onPress={() => removeItem(b.itemId)}>
+                <TouchableOpacity onPress={() => removeFromBasket(b.itemId)}>
                   <Text style={styles.removeBtn}>✕</Text>
                 </TouchableOpacity>
               </View>

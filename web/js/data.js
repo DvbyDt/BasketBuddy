@@ -471,3 +471,24 @@ let basket = [];
 let splitItems = [];
 let customStoreCount = 0;
 let nextId = 92;
+
+// ── Persistence for user-added items ────────────────────────────
+function saveCustomItems() {
+  const custom = items.filter(i => i.id >= 92);
+  try { localStorage.setItem('basketbuddy_custom_items', JSON.stringify(custom)); } catch(e) {}
+}
+
+function loadCustomItems() {
+  try {
+    const saved = localStorage.getItem('basketbuddy_custom_items');
+    if (saved) {
+      const custom = JSON.parse(saved);
+      custom.forEach(item => {
+        if (!items.find(i => i.id === item.id)) {
+          items.push(item);
+          if (item.id >= nextId) nextId = item.id + 1;
+        }
+      });
+    }
+  } catch(e) {}
+}

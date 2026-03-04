@@ -58,6 +58,7 @@ function saveItem() {
   }
 
   items.push({ id: nextId++, name, quantity, category, prices, history: {} });
+  saveCustomItems();
 
   // Reset form
   document.getElementById('addName').value = '';

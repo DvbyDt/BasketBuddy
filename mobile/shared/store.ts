@@ -1,5 +1,6 @@
 // ─── Shared data & helper functions for BasketBuddy ──────────────
 import rawData from './data.json';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface Store {
   id: string;
@@ -18,7 +19,48 @@ export interface Item {
 }
 
 export const stores: Store[] = rawData.stores;
-export const items = rawData.items as unknown as Item[];
+export const items: Item[] = [...(rawData.items as unknown as Item[])];
+
+const CUSTOM_ITEMS_KEY = 'basketbuddy_custom_items';
+let _customItemsLoaded = false;
+
+export async function loadCustomItems(): Promise<void> {
+  if (_customItemsLoaded) return;
+  try {
+    const saved = await AsyncStorage.getItem(CUSTOM_ITEMS_KEY);
+    if (saved) {
+      const custom: Item[] = JSON.parse(saved);
+      custom.forEach(item => {
+        if (!items.find(i => i.id === item.id)) {
+          items.push(item);
+        }
+      });
+    }
+  } catch {}
+  _customItemsLoaded = true;
+}
+
+export async function addCustomItem(item: Item): Promise<void> {
+  items.push(item);
+  const custom = items.filter(i => i.id >= 10000);
+  try {
+    await AsyncStorage.setItem(CUSTOM_ITEMS_KEY, JSON.stringify(custom));
+  } catch {}
+}
+
+export async function removeCustomItem(id: number): Promise<void> {
+  const idx = items.findIndex(i => i.id === id);
+  if (idx !== -1) items.splice(idx, 1);
+  const custom = items.filter(i => i.id >= 10000);
+  try {
+    await AsyncStorage.setItem(CUSTOM_ITEMS_KEY, JSON.stringify(custom));
+  } catch {}
+}
+
+export function getNextCustomId(): number {
+  const customIds = items.filter(i => i.id >= 10000).map(i => i.id);
+  return customIds.length > 0 ? Math.max(...customIds) + 1 : 10000;
+}
 
 export function fmt(price: number): string {
   return `€${price.toFixed(2)}`;

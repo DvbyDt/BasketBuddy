@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { COLORS, SHADOWS } from '../../shared/theme';
 import {
   getBestDeals,
   searchItems,
+  loadCustomItems,
   Item,
 } from '../../shared/store';
 import { PriceCard } from '../../components/PriceCard';
@@ -29,6 +30,11 @@ const TRENDING = [
 export default function CompareScreen() {
   const [query, setQuery] = useState('');
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    loadCustomItems().then(() => setReady(true));
+  }, []);
 
   const isSearching = query.length > 0;
   const results = isSearching ? searchItems(query) : [];

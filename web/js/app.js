@@ -2,6 +2,7 @@
 // App initialisation — runs once the page loads.
 
 document.addEventListener('DOMContentLoaded', () => {
+  loadCustomItems();
   renderBestDeals();
   loadAISettingsIntoForm();
   updateAIStatusPill();

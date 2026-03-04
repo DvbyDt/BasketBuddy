@@ -8,28 +8,14 @@ import {
   StyleSheet,
   SafeAreaView,
   Alert,
-  Switch,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SHADOWS } from '../../shared/theme';
 import { stores, Store } from '../../shared/store';
 
-const AI_STORAGE_KEY = 'basketbuddy_ai';
 const STORES_STORAGE_KEY = 'basketbuddy_custom_stores';
 
-type AIProvider = 'groq' | 'anthropic' | 'none';
-
-interface AISettings {
-  provider: AIProvider;
-  key: string;
-}
-
 export default function SettingsScreen() {
-  // AI settings
-  const [provider, setProvider] = useState<AIProvider>('groq');
-  const [apiKey, setApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-
   // Custom stores
   const [customStores, setCustomStores] = useState<Store[]>([]);
   const [showAddStore, setShowAddStore] = useState(false);
@@ -42,33 +28,11 @@ export default function SettingsScreen() {
 
   const loadSettings = async () => {
     try {
-      const aiJson = await AsyncStorage.getItem(AI_STORAGE_KEY);
-      if (aiJson) {
-        const ai: AISettings = JSON.parse(aiJson);
-        setProvider(ai.provider);
-        setApiKey(ai.key || '');
-      }
       const storesJson = await AsyncStorage.getItem(STORES_STORAGE_KEY);
       if (storesJson) {
         setCustomStores(JSON.parse(storesJson));
       }
     } catch {}
-  };
-
-  const saveAI = async () => {
-    if (provider !== 'none' && !apiKey.trim()) {
-      Alert.alert('Missing Key', 'Enter your API key first!');
-      return;
-    }
-    try {
-      await AsyncStorage.setItem(
-        AI_STORAGE_KEY,
-        JSON.stringify({ provider, key: apiKey.trim() })
-      );
-      Alert.alert('Saved', 'AI settings saved!');
-    } catch {
-      Alert.alert('Error', 'Failed to save settings');
-    }
   };
 
   const addCustomStore = async () => {
@@ -100,92 +64,10 @@ export default function SettingsScreen() {
     } catch {}
   };
 
-  const builtInStoreIds = ['tesco', 'lidl', 'aldi', 'asian', 'supervalue'];
-
-  const providerInfo: Record<string, { label: string; placeholder: string; help: string }> = {
-    groq: {
-      label: 'Groq API Key',
-      placeholder: 'gsk_...',
-      help: '💡 Groq is completely free — sign up at console.groq.com, create an API key. No credit card needed.',
-    },
-    anthropic: {
-      label: 'Anthropic API Key',
-      placeholder: 'sk-ant-...',
-      help: '💡 Anthropic Claude Haiku — very cheap (~€0.003 for 90 items). Get key at console.anthropic.com.',
-    },
-    none: {
-      label: '',
-      placeholder: '',
-      help: '⚠️ AI features disabled. Receipt scanning and basket optimizer will use demo mode.',
-    },
-  };
-
-  const current = providerInfo[provider];
-
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.headerTitle}>⚙️ Settings</Text>
-
-        {/* ── AI Provider ────────────────────────────────── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🤖 AI Provider</Text>
-          <View style={styles.card}>
-            <View style={styles.providerRow}>
-              {(['groq', 'anthropic', 'none'] as AIProvider[]).map(p => (
-                <TouchableOpacity
-                  key={p}
-                  style={[
-                    styles.providerChip,
-                    provider === p && styles.providerChipActive,
-                  ]}
-                  onPress={() => setProvider(p)}
-                >
-                  <Text
-                    style={[
-                      styles.providerChipText,
-                      provider === p && styles.providerChipTextActive,
-                    ]}
-                  >
-                    {p === 'groq' ? '⚡ Groq (Free)' : p === 'anthropic' ? '🧠 Claude' : '❌ None'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.helpBox}>
-              <Text style={styles.helpText}>{current.help}</Text>
-            </View>
-
-            {provider !== 'none' && (
-              <>
-                <Text style={styles.label}>{current.label}</Text>
-                <View style={styles.keyRow}>
-                  <TextInput
-                    style={[styles.input, { flex: 1 }]}
-                    placeholder={current.placeholder}
-                    placeholderTextColor={COLORS.muted}
-                    value={apiKey}
-                    onChangeText={setApiKey}
-                    secureTextEntry={!showKey}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                  <TouchableOpacity
-                    style={styles.eyeBtn}
-                    onPress={() => setShowKey(!showKey)}
-                  >
-                    <Text style={{ fontSize: 18 }}>{showKey ? '🙈' : '👁️'}</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-
-            <TouchableOpacity style={styles.btnPrimary} onPress={saveAI}>
-              <Text style={styles.btnPrimaryText}>💾 Save AI Settings</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
 
         {/* ── Manage Stores ──────────────────────────────── */}
         <View style={styles.section}>
@@ -283,38 +165,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     ...SHADOWS.card,
-  },
-  providerRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  providerChip: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-  },
-  providerChipActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.chipBg,
-  },
-  providerChipText: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
-  providerChipTextActive: { color: COLORS.primary },
-  helpBox: {
-    backgroundColor: COLORS.background,
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 12,
-  },
-  helpText: { fontSize: 12, fontWeight: '600', color: COLORS.textLight, lineHeight: 18 },
-  label: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.textLight,
-    marginBottom: 6,
-  },
-  keyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  eyeBtn: {
-    padding: 8,
   },
   input: {
     backgroundColor: COLORS.background,

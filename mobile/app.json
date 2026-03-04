@@ -22,9 +22,19 @@
       "bundleIdentifier": "com.dvbydt.basketbuddy",
       "supportsTablet": true
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "ef236fd3-e86c-4466-8368-f457b61b77d2"
+      }
     }
   }
 }

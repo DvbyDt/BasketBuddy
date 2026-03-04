@@ -1,60 +1,62 @@
 // ─── Shared data & helper functions for BasketBuddy ──────────────
 import rawData from './data.json';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-export interface Store {
-  id: string;
-  name: string;
-  color: string;
-  emoji: string;
-}
-
-export interface Item {
-  id: number;
-  name: string;
-  quantity: string;
-  category: string;
-  prices: Record<string, number>;
-  history: Record<string, number[]>;
-}
+import { Store, Item } from './types';
+export type { Store, Item, BasketItem } from './types';
+import {
+  syncCustomItemToCloud,
+  removeCustomItemFromCloud,
+  subscribeToCustomItems,
+} from './firestore';
 
 export const stores: Store[] = rawData.stores;
 export const items: Item[] = [...(rawData.items as unknown as Item[])];
 
-const CUSTOM_ITEMS_KEY = 'basketbuddy_custom_items';
 let _customItemsLoaded = false;
+let _unsubscribe: (() => void) | null = null;
+let _onCustomItemsChange: ((items: Item[]) => void) | null = null;
 
+/** Register a callback to be notified when cloud custom items change */
+export function onCustomItemsUpdate(cb: (customItems: Item[]) => void) {
+  _onCustomItemsChange = cb;
+}
+
+/** Load custom items from Firestore (real-time listener) */
 export async function loadCustomItems(): Promise<void> {
   if (_customItemsLoaded) return;
-  try {
-    const saved = await AsyncStorage.getItem(CUSTOM_ITEMS_KEY);
-    if (saved) {
-      const custom: Item[] = JSON.parse(saved);
-      custom.forEach(item => {
-        if (!items.find(i => i.id === item.id)) {
-          items.push(item);
-        }
-      });
-    }
-  } catch {}
   _customItemsLoaded = true;
+
+  // Subscribe to Firestore real-time updates
+  _unsubscribe = subscribeToCustomItems((cloudItems: Item[]) => {
+    // Remove all existing custom items from the local array
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (items[i].id >= 10000) items.splice(i, 1);
+    }
+    // Add cloud items
+    cloudItems.forEach(ci => {
+      if (!items.find(i => i.id === ci.id)) {
+        items.push(ci);
+      }
+    });
+    // Notify listeners
+    if (_onCustomItemsChange) {
+      _onCustomItemsChange(items.filter(i => i.id >= 10000));
+    }
+  });
 }
 
+/** Add a custom item locally + sync to Firestore */
 export async function addCustomItem(item: Item): Promise<void> {
-  items.push(item);
-  const custom = items.filter(i => i.id >= 10000);
-  try {
-    await AsyncStorage.setItem(CUSTOM_ITEMS_KEY, JSON.stringify(custom));
-  } catch {}
+  if (!items.find(i => i.id === item.id)) {
+    items.push(item);
+  }
+  await syncCustomItemToCloud(item);
 }
 
+/** Remove a custom item locally + sync to Firestore */
 export async function removeCustomItem(id: number): Promise<void> {
   const idx = items.findIndex(i => i.id === id);
   if (idx !== -1) items.splice(idx, 1);
-  const custom = items.filter(i => i.id >= 10000);
-  try {
-    await AsyncStorage.setItem(CUSTOM_ITEMS_KEY, JSON.stringify(custom));
-  } catch {}
+  await removeCustomItemFromCloud(id);
 }
 
 export function getNextCustomId(): number {

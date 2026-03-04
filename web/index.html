@@ -13,7 +13,7 @@
   <meta property="og:type" content="website"/>
   <meta property="og:url" content="https://dvbydt.github.io/BasketBuddy/"/>
   <link rel="manifest" href="manifest.json"/>
-  <link rel="stylesheet" href="css/styles.css?v=6"/>
+  <link rel="stylesheet" href="css/styles.css?v=7"/>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 </head>
 <body>
@@ -183,16 +183,21 @@
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
+  <!-- Firebase SDK (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
   <!-- JS -->
-  <script src="js/data.js?v=6"></script>
-  <script src="js/ui.js?v=6"></script>
-  <script src="js/ai.js?v=6"></script>
-  <script src="js/compare.js?v=6"></script>
-  <script src="js/basket.js?v=6"></script>
-  <script src="js/split.js?v=6"></script>
-  <script src="js/trends.js?v=6"></script>
-  <script src="js/additem.js?v=6"></script>
-  <script src="js/app.js?v=6"></script>
+  <script src="js/data.js?v=7"></script>
+  <script src="js/firebase-sync.js?v=7"></script>
+  <script src="js/ui.js?v=7"></script>
+  <script src="js/ai.js?v=7"></script>
+  <script src="js/compare.js?v=7"></script>
+  <script src="js/basket.js?v=7"></script>
+  <script src="js/split.js?v=7"></script>
+  <script src="js/trends.js?v=7"></script>
+  <script src="js/additem.js?v=7"></script>
+  <script src="js/app.js?v=7"></script>
   <script>
     // Show admin-only elements when ?admin=1 is in the URL
     if (new URLSearchParams(window.location.search).get('admin') === '1') {

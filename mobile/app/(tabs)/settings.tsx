@@ -14,13 +14,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SHADOWS } from '../../shared/theme';
 import {
   stores,
-  Store,
   items,
   addCustomItem,
   removeCustomItem,
   getNextCustomId,
   loadCustomItems,
+  onCustomItemsUpdate,
 } from '../../shared/store';
+import type { Store } from '../../shared/types';
 
 const STORES_STORAGE_KEY = 'basketbuddy_custom_stores';
 
@@ -43,6 +44,10 @@ export default function SettingsScreen() {
   // Load settings on mount
   useEffect(() => {
     loadSettings();
+    // Listen for real-time custom items changes from Firestore
+    onCustomItemsUpdate((customItems) => {
+      setCustomItemsList(customItems);
+    });
   }, []);
 
   const loadSettings = async () => {

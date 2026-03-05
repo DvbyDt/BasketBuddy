@@ -1,0 +1,25 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build_android:
+    name: Build Android APK
+    runs_on: linux
+    steps:
+      - name: Checkout
+        uses: eas/checkout@v1
+
+      - name: Setup Node
+        uses: eas/use_npm@v1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build APK
+        uses: eas/build@v1
+        with:
+          platform: android
+          profile: preview

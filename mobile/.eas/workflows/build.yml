@@ -7,7 +7,7 @@ on:
 jobs:
   build_android:
     name: Build Android APK
-    runs_on: linux
+    runs_on: linux-medium
     steps:
       - name: Checkout
         uses: eas/checkout@v1

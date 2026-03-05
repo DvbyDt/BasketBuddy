@@ -7,16 +7,7 @@ on:
 jobs:
   build_android:
     name: Build Android APK
-    runs_on: linux-medium
-    steps:
-      - name: Checkout
-        uses: eas/checkout
-
-      - name: Install dependencies
-        uses: eas/install_node_modules
-
-      - name: Setup EAS CLI
-        run: npm install -g eas-cli
-
-      - name: Build APK
-        run: eas build --platform android --profile preview --non-interactive
+    type: build
+    params:
+      platform: android
+      profile: preview

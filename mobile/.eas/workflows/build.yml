@@ -16,7 +16,4 @@ jobs:
         uses: eas/install_node_modules
 
       - name: Build APK
-        uses: eas/build
-        with:
-          platform: android
-          profile: preview
+        run: eas build --platform android --profile preview --non-interactive

@@ -54,45 +54,52 @@ const AI_PROVIDERS = {
 
 function loadAISettings() {
   try {
-    return JSON.parse(localStorage.getItem('grocerymate_ai') || '{}');
+    return JSON.parse(localStorage.getItem('basketbuddy_ai') || '{}');
   } catch { return {}; }
 }
 
 function saveAISettings() {
-  const provider = document.getElementById('aiProvider').value;
-  const key      = document.getElementById('aiApiKey').value.trim();
+  const providerEl = document.getElementById('aiProvider');
+  const keyEl = document.getElementById('aiApiKey');
+  if (!providerEl || !keyEl) return;
+  const provider = providerEl.value;
+  const key      = keyEl.value.trim();
   if (provider !== 'none' && !key) {
     showToast('Enter your API key first!');
     return;
   }
-  localStorage.setItem('grocerymate_ai', JSON.stringify({ provider, key }));
+  localStorage.setItem('basketbuddy_ai', JSON.stringify({ provider, key }));
   updateAIStatusPill();
   showToast('✅ AI settings saved!');
 }
 
 function loadAISettingsIntoForm() {
   const s = loadAISettings();
-  if (s.provider) document.getElementById('aiProvider').value = s.provider;
-  if (s.key)      document.getElementById('aiApiKey').value = s.key;
+  const providerEl = document.getElementById('aiProvider');
+  const keyEl = document.getElementById('aiApiKey');
+  if (providerEl && s.provider) providerEl.value = s.provider;
+  if (keyEl && s.key) keyEl.value = s.key;
   onAIProviderChange();
 }
 
 function onAIProviderChange() {
-  const provider = document.getElementById('aiProvider').value;
+  const providerEl = document.getElementById('aiProvider');
+  if (!providerEl) return;
+  const provider = providerEl.value;
   const keyRow   = document.getElementById('aiKeyRow');
   const keyLabel = document.getElementById('aiKeyLabel');
   const keyHelp  = document.getElementById('aiKeyHelp');
   const keyInput = document.getElementById('aiApiKey');
 
   if (provider === 'none') {
-    keyRow.style.display = 'none';
-    keyHelp.innerHTML = '⚠️ AI features disabled. Receipt scanning and basket optimizer will use demo mode.';
+    if (keyRow) keyRow.style.display = 'none';
+    if (keyHelp) keyHelp.innerHTML = '⚠️ AI features disabled. Receipt scanning and basket optimizer will use demo mode.';
   } else {
-    keyRow.style.display = 'block';
+    if (keyRow) keyRow.style.display = 'block';
     const p = AI_PROVIDERS[provider];
-    keyLabel.textContent  = p.keyLabel;
-    keyInput.placeholder  = p.keyPlaceholder;
-    keyHelp.innerHTML     = p.helpText;
+    if (keyLabel) keyLabel.textContent = p.keyLabel;
+    if (keyInput) keyInput.placeholder = p.keyPlaceholder;
+    if (keyHelp) keyHelp.innerHTML = p.helpText;
   }
 }
 

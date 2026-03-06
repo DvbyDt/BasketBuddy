@@ -8,13 +8,18 @@ function addToBasket(itemId) {
     showToast('Already in basket!');
     return;
   }
-  const { store, price } = getCheapestStore(item);
-  basket.push({ itemId, name: item.name, quantity: item.quantity || '', store: store.id, price });
+  const cheapest = getCheapestStore(item);
+  if (!cheapest.store) { showToast('No price data for this item'); return; }
+  const { store, price } = cheapest;
+  const basketItem = { itemId, name: item.name, quantity: item.quantity || '', store: store.id, price };
+  basket.push(basketItem);
+  if (typeof syncBasketItemToCloud === 'function') syncBasketItemToCloud(basketItem);
   showToast(`✅ Added ${item.name} to basket`);
 }
 
 function removeFromBasket(itemId) {
   basket = basket.filter(b => b.itemId !== itemId);
+  if (typeof removeBasketItemFromCloud === 'function') removeBasketItemFromCloud(itemId);
   renderBasket();
 }
 

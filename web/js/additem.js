@@ -90,7 +90,8 @@ function renderStoreList() {
 }
 
 function removeStore(id) {
-  stores = stores.filter(s => s.id !== id);
+  const idx = stores.findIndex(s => s.id === id);
+  if (idx !== -1) stores.splice(idx, 1);
   renderStoreList();
   showToast('Store removed');
 }

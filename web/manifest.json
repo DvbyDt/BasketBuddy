@@ -1,8 +1,8 @@
 {
-  "name": "GroceryMate Dublin",
-  "short_name": "GroceryMate",
-  "description": "Compare grocery prices across Dublin stores",
-  "start_url": "/index.html",
+  "name": "BasketBuddy Dublin",
+  "short_name": "BasketBuddy",
+  "description": "Compare grocery prices across Dublin stores — BasketBuddy",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#FFF9F0",
   "theme_color": "#FF6B35",

@@ -470,7 +470,7 @@ let items = [
 let basket = [];
 let splitItems = [];
 let customStoreCount = 0;
-let nextId = 92;
+let nextId = 10000;
 
 // ── Persistence for user-added items (now via Firestore) ────────
 function saveCustomItems() {

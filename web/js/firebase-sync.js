@@ -66,7 +66,7 @@ function subscribeToCustomItems(onChange) {
 
 /** Replace saveCustomItems — now syncs to cloud */
 function saveCustomItemsToCloud() {
-  const custom = items.filter(i => i.id >= 92);
+  const custom = items.filter(i => i.id >= 10000);
   custom.forEach(item => syncCustomItemToCloud(item));
 }
 
@@ -75,7 +75,7 @@ function loadCustomItemsFromCloud() {
   subscribeToCustomItems(cloudItems => {
     // Remove old custom items
     for (let i = items.length - 1; i >= 0; i--) {
-      if (items[i].id >= 92) items.splice(i, 1);
+      if (items[i].id >= 10000) items.splice(i, 1);
     }
     // Add cloud items
     cloudItems.forEach(ci => {
@@ -85,8 +85,8 @@ function loadCustomItemsFromCloud() {
       }
     });
     // Re-render current tab
-    if (typeof renderCompare === 'function') {
-      try { renderCompare(); } catch(e) {}
+    if (typeof renderBestDeals === 'function') {
+      try { renderBestDeals(); } catch(e) {}
     }
   });
 }
@@ -95,7 +95,7 @@ function loadCustomItemsFromCloud() {
 
 function syncBasketItemToCloud(item) {
   ensureWebAuth().then(uid => {
-    db.collection('sharedBasket').doc(String(item.id || item.name)).set({
+    db.collection('sharedBasket').doc(String(item.itemId || item.name)).set({
       ...item,
       addedBy: uid,
       updatedAt: Date.now(),
@@ -103,8 +103,8 @@ function syncBasketItemToCloud(item) {
   });
 }
 
-function removeBasketItemFromCloud(itemName) {
-  db.collection('sharedBasket').doc(String(itemName)).delete()
+function removeBasketItemFromCloud(itemId) {
+  db.collection('sharedBasket').doc(String(itemId)).delete()
     .catch(e => console.warn('[Firestore] basket remove error:', e));
 }
 

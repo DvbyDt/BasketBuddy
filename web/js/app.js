@@ -7,6 +7,13 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAISettingsIntoForm();
   updateAIStatusPill();
   initScraperStatus();
+  // Subscribe to shared basket from Firestore
+  if (typeof subscribeToBasket === 'function') {
+    subscribeToBasket(cloudBasket => {
+      basket = cloudBasket;
+      renderBasket();
+    });
+  }
 });
 
 function initScraperStatus() {

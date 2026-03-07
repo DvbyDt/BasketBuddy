@@ -41,6 +41,10 @@ function renderSearchResults(results) {
     const worst = prices[prices.length - 1];
     const saving = worst.price - best.price;
 
+    const inBasket = basket.find(b => b.itemId === item.id);
+    const btnHtml = inBasket
+      ? `<button class="btn btn-sm btn-outline" onclick="removeFromBasket(${item.id})">- Remove</button>`
+      : `<button class="btn btn-sm btn-outline" onclick="addToBasket(${item.id})">+ Add</button>`;
     return `<div class="price-card cheapest">
       <div class="cheapest-ribbon">BEST DEAL</div>
       <div class="price-card-header">
@@ -48,7 +52,7 @@ function renderSearchResults(results) {
           <div class="item-name">${item.name}${item.quantity ? ' <span style="font-weight:600;color:var(--muted);font-size:13px">(' + item.quantity + ')</span>' : ''}</div>
           <div class="item-unit">${item.category}</div>
         </div>
-        <button class="btn btn-sm btn-outline" onclick="addToBasket(${item.id})">+ Basket</button>
+        ${btnHtml}
       </div>
       <div class="price-list">
         ${prices.map((p, i) => `

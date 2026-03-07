@@ -1,0 +1,84 @@
+name: Release Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_url:
+        description: 'EAS Build URL (optional — if empty, fetches latest)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Get latest APK URL from EAS
+        id: get_apk
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          echo "Fetching latest Android build..."
+          BUILD_JSON=$(eas build:list --platform android --status finished --limit 1 --non-interactive --json 2>/dev/null)
+          APK_URL=$(echo "$BUILD_JSON" | jq -r '.[0].artifacts.buildUrl')
+          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
+          APP_VERSION=$(echo "$BUILD_JSON" | jq -r '.[0].appVersion')
+
+          if [ -z "$APK_URL" ] || [ "$APK_URL" = "null" ]; then
+            echo "❌ No APK URL found"
+            exit 1
+          fi
+
+          echo "apk_url=$APK_URL" >> "$GITHUB_OUTPUT"
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+          echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "✅ Found APK: $APK_URL"
+
+      - name: Download APK
+        run: |
+          curl -L -o BasketBuddy.apk "${{ steps.get_apk.outputs.apk_url }}"
+          ls -lh BasketBuddy.apk
+
+      - name: Create or Update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="v${{ steps.get_apk.outputs.app_version }}"
+          TAG_NAME="$VERSION"
+
+          # Delete existing release if it exists
+          gh release delete "$TAG_NAME" --yes 2>/dev/null || true
+          git push origin --delete "$TAG_NAME" 2>/dev/null || true
+
+          # Create new release
+          gh release create "$TAG_NAME" \
+            BasketBuddy.apk \
+            --title "BasketBuddy $VERSION" \
+            --notes "## BasketBuddy $VERSION
+
+          ### Download
+          Install the APK directly on your Android device.
+
+          ### What's included
+          - 🔍 Compare prices across 5 Dublin grocery stores
+          - 🧺 Smart basket with AI optimizer
+          - 🧾 Receipt splitter
+          - 📈 5-week price trends
+          - 🔥 Real-time cloud sync via Firebase
+          - ➕ Custom items & stores
+
+          **Build:** [${{ steps.get_apk.outputs.build_id }}](https://expo.dev/accounts/dvbydt/projects/basketbuddy/builds/${{ steps.get_apk.outputs.build_id }})"
+
+          echo "✅ Release created: $TAG_NAME"

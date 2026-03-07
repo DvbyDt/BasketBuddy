@@ -1,0 +1,50 @@
+name: Scrape Grocery Data
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Every Sunday at midnight
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 lxml
+
+      - name: Run Tesco scraper
+        run: python scraper/tesco_full_scraper.py
+
+      - name: Run Lidl scraper
+        run: python scraper/lidl_full_scraper.py
+
+      - name: Commit CSVs
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add scraper/tesco_all_items.csv scraper/lidl_all_items.csv
+          git commit -m "chore: update grocery CSVs (auto scrape)" || echo "No changes to commit"
+          git push
+
+      - name: Convert CSVs to JS
+        run: |
+          python scraper/csv_to_js.py
+
+      - name: Commit updated data.js
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add web/js/data.js
+          git commit -m "chore: update grocery data.js (auto import from CSV)" || echo "No changes to commit"
+          git push
+
+      # Optionally, add steps to import CSVs into your app

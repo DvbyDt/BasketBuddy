@@ -1,11 +1,9 @@
 name: Release Android APK
 
 on:
+  schedule:
+    - cron: '0 * * * *' # Every hour
   workflow_dispatch:
-    inputs:
-      build_url:
-        description: 'EAS Build URL (optional — if empty, fetches latest)'
-        required: false
 
 permissions:
   contents: write

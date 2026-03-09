@@ -24,38 +24,27 @@ export default function TabLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{
-          title: 'Compare',
-          tabBarIcon: () => <TabIcon icon="🔍" />,
-        }}
+        options={{ title: 'Compare',  tabBarIcon: () => <TabIcon icon="🔍" /> }}
       />
       <Tabs.Screen
         name="basket"
-        options={{
-          title: 'Basket',
-          tabBarIcon: () => <TabIcon icon="🧺" />,
-        }}
+        options={{ title: 'Basket',   tabBarIcon: () => <TabIcon icon="🧺" /> }}
+      />
+      <Tabs.Screen
+        name="offers"
+        options={{ title: 'Offers',   tabBarIcon: () => <TabIcon icon="🏷️" /> }}
       />
       <Tabs.Screen
         name="split"
-        options={{
-          title: 'Split',
-          tabBarIcon: () => <TabIcon icon="🧾" />,
-        }}
+        options={{ title: 'Split',    tabBarIcon: () => <TabIcon icon="🧾" /> }}
       />
       <Tabs.Screen
         name="trends"
-        options={{
-          title: 'Trends',
-          tabBarIcon: () => <TabIcon icon="📈" />,
-        }}
+        options={{ title: 'Trends',   tabBarIcon: () => <TabIcon icon="📈" /> }}
       />
       <Tabs.Screen
         name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: () => <TabIcon icon="⚙️" />,
-        }}
+        options={{ title: 'Settings', tabBarIcon: () => <TabIcon icon="⚙️" /> }}
       />
     </Tabs>
   );

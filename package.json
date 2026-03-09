@@ -1,0 +1,10 @@
+{
+  "name": "basketbuddy-backend",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {},
+  "description": "Backend for BasketBuddy project"
+}

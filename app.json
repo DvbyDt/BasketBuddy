@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "73fb443d-a532-46ad-af21-47d02e5584f3"
+      }
+    },
+    "android": {
+      "package": "com.dvbydt.basketbuddybackend"
+    }
+  }
+}

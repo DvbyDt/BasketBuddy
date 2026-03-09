@@ -19,7 +19,7 @@ export interface Item {
 export interface BasketItem {
   itemId: number;
   name: string;
-  quantity: string;
+  quantity: number;
   store: string;
   price: number;
 }

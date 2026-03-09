@@ -1,0 +1,10 @@
+{
+  "name": "basketbuddy-web",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "react-scripts start"
+  },
+  "dependencies": {},
+  "description": "Frontend web for BasketBuddy project"
+}

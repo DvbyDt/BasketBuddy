@@ -1,63 +1,52 @@
-<p align="center">
-  <img src="https://img.shields.io/badge/BasketBuddy-🛒-FF6B35?style=for-the-badge&labelColor=FFF9F0" alt="BasketBuddy"/>
-</p>
+# BasketBuddy
 
-<h1 align="center">BasketBuddy</h1>
+BasketBuddy is a full-stack grocery price comparison platform for Dublin shoppers. It tracks prices of grocery items across Tesco, Lidl, Aldi, Asian Supermarket, and Super Value. Available as a progressive web app and a native Android app, with real-time cloud sync for custom items and baskets.
 
-<p align="center">
-  <strong>Compare grocery prices across Dublin stores. Save money on every shop.</strong>
-</p>
+## Features
+- Compare prices across 5 Dublin grocery stores
+- Smart basket with AI optimizer
+- Receipt splitter
+- 5-week price trends
+- Real-time cloud sync via Firebase
+- Custom items & stores
+- Android APK and PWA
 
-<p align="center">
-  <a href="https://dvbydt.github.io/BasketBuddy/"><img src="https://img.shields.io/badge/Web_App-Live-06D6A0?style=flat-square&logo=googlechrome&logoColor=white" alt="Web App"/></a>
-  <a href="https://github.com/DvbyDt/BasketBuddy/releases/latest/download/BasketBuddy.apk"><img src="https://img.shields.io/badge/Android_APK-Download-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android APK"/></a>
-  <a href="https://github.com/DvbyDt/BasketBuddy/actions/workflows/deploy.yml"><img src="https://github.com/DvbyDt/BasketBuddy/actions/workflows/deploy.yml/badge.svg" alt="Deploy"/></a>
-</p>
+## Architecture
+- **Web:** Vanilla HTML/CSS/JS PWA
+- **Mobile:** React Native Expo SDK 52, TypeScript
+- **Backend:** Firebase Firestore, Anonymous Auth
+- **Scraper:** Python scripts for price updates
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Expo_SDK-52-000020?style=flat-square&logo=expo" alt="Expo SDK 52"/>
-  <img src="https://img.shields.io/badge/Firebase-Firestore-FFCA28?style=flat-square&logo=firebase&logoColor=white" alt="Firebase"/>
-  <img src="https://img.shields.io/badge/React_Native-0.76-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React Native"/>
-  <img src="https://img.shields.io/badge/TypeScript-5.3-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"/>
-</p>
+## Project Structure
+- `web/` — PWA frontend
+- `mobile/` — React Native app
+- `scraper/` — Python scripts for price scraping
 
----
+## Quick Start
+1. Clone the repo
+2. Run the web app (`web/index.html`) or install the APK
+3. Use the scraper to update prices
 
-BasketBuddy is a full-stack grocery price comparison platform for Dublin shoppers. It tracks prices of **91 grocery items** across **5 stores** — Tesco, Lidl, Aldi, Asian Supermarket, and Super Value. Available as a **progressive web app** and a **native Android app**, with **real-time cloud sync** so custom items and baskets are shared instantly across all users and devices.
+## Data Pipeline
+- Scraper fetches prices from Tesco, Lidl, Aldi, etc.
+- Data is imported into the app automatically
 
-## Table of Contents
+## Firebase & Cloud Sync
+- Firestore stores custom items and shared baskets
+- Anonymous Auth for user sessions
 
-- [Download](#-download)
-- [Features](#-features)
-- [Architecture](#-architecture)
-- [Tech Stack](#-tech-stack)
-- [Project Structure](#-project-structure)
-- [Quick Start](#-quick-start)
-- [Data Pipeline](#-data-pipeline--scraper)
-- [Firebase & Cloud Sync](#-firebase--cloud-sync)
-- [Security](#-security)
-- [CI/CD Pipeline](#-cicd-pipeline)
-- [Design Decisions & Trade-offs](#-design-decisions--trade-offs)
-- [Supported Stores](#-supported-stores)
-- [Data Overview](#-data-overview)
-- [Development Guide](#-development-guide)
-- [Roadmap](#-roadmap)
-- [License](#-license)
+## Security
+- Firestore rules restrict updates to item creators
 
----
+## CI/CD Pipeline
+- GitHub Actions for web deploy and APK release
+- Expo EAS for Android builds
 
-## 📲 Download
+## Contributing
+Pull requests are welcome. For major changes, please open an issue first.
 
-| Platform | Link | Size |
-|----------|------|------|
-| 🌐 **Web App (PWA)** | [dvbydt.github.io/BasketBuddy](https://dvbydt.github.io/BasketBuddy/) | ~50 KB |
-| 🤖 **Android APK** | [Download Latest APK](https://github.com/DvbyDt/BasketBuddy/releases/latest/download/BasketBuddy.apk) | ~66 MB |
-
-> **Android install:** Download APK → open on phone → allow "Install from unknown sources" → tap Install.
-
----
-
-## ✨ Features
+## License
+MIT
 
 ### Feature Matrix
 

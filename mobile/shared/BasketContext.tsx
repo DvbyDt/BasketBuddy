@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { getCheapestStore, Item } from './store';
+import { Item } from './store';
 import { BasketItem } from './types';
 import {
   syncBasketItemToCloud,
@@ -12,18 +12,22 @@ export type { BasketItem } from './types';
 
 interface BasketContextType {
   basket: BasketItem[];
-  addToBasket: (item: Item) => void;
-  removeFromBasket: (itemId: number) => void;
+  addToBasket: (item: Item, storeId: string, quantity: number) => void;
+  removeFromBasket: (itemId: number, storeId: string) => void;
+  updateQuantity: (itemId: number, storeId: string, quantity: number) => void;
   clearBasket: () => void;
-  isInBasket: (itemId: number) => boolean;
+  isInBasket: (itemId: number, storeId: string) => boolean;
+  getQuantity: (itemId: number, storeId: string) => number;
 }
 
 const BasketContext = createContext<BasketContextType>({
   basket: [],
   addToBasket: () => {},
   removeFromBasket: () => {},
+  updateQuantity: () => {},
   clearBasket: () => {},
   isInBasket: () => false,
+  getQuantity: () => 1,
 });
 
 export function BasketProvider({ children }: { children: ReactNode }) {
@@ -37,24 +41,46 @@ export function BasketProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const addToBasket = (item: Item) => {
-    if (basket.find(b => b.itemId === item.id)) return;
-    const cheapest = getCheapestStore(item);
-    if (!cheapest) return;
+  const addToBasket = (item: Item, storeId: string, quantity: number) => {
+    // If already in basket, just update quantity
+    const existing = basket.find(b => b.itemId === item.id && b.store === storeId);
+    if (existing) {
+      updateQuantity(item.id, storeId, existing.quantity + quantity);
+      return;
+    }
+    const price = item.prices[storeId];
+    if (price == null) return;
     const basketItem: BasketItem = {
       itemId: item.id,
       name: item.name,
-      quantity: item.quantity || '',
-      store: cheapest.store.id,
-      price: cheapest.price,
+      quantity,
+      store: storeId,
+      price,
     };
-    // Optimistic local update + cloud sync
     setBasket(prev => [...prev, basketItem]);
     syncBasketItemToCloud(basketItem);
   };
 
-  const removeFromBasket = (itemId: number) => {
-    setBasket(prev => prev.filter(b => b.itemId !== itemId));
+  const updateQuantity = (itemId: number, storeId: string, quantity: number) => {
+    if (quantity <= 0) {
+      removeFromBasket(itemId, storeId);
+      return;
+    }
+    setBasket(prev =>
+      prev.map(b =>
+        b.itemId === itemId && b.store === storeId
+          ? { ...b, quantity }
+          : b
+      )
+    );
+    const existing = basket.find(b => b.itemId === itemId && b.store === storeId);
+    if (existing) {
+      syncBasketItemToCloud({ ...existing, quantity });
+    }
+  };
+
+  const removeFromBasket = (itemId: number, storeId: string) => {
+    setBasket(prev => prev.filter(b => !(b.itemId === itemId && b.store === storeId)));
     removeBasketItemFromCloud(itemId);
   };
 
@@ -63,11 +89,17 @@ export function BasketProvider({ children }: { children: ReactNode }) {
     clearBasketInCloud();
   };
 
-  const isInBasket = (itemId: number) => basket.some(b => b.itemId === itemId);
+  const isInBasket = (itemId: number, storeId: string) =>
+    basket.some(b => b.itemId === itemId && b.store === storeId);
+
+  const getQuantity = (itemId: number, storeId: string): number => {
+    const found = basket.find(b => b.itemId === itemId && b.store === storeId);
+    return found?.quantity ?? 1;
+  };
 
   return (
     <BasketContext.Provider
-      value={{ basket, addToBasket, removeFromBasket, clearBasket, isInBasket }}
+      value={{ basket, addToBasket, removeFromBasket, updateQuantity, clearBasket, isInBasket, getQuantity }}
     >
       {children}
     </BasketContext.Provider>

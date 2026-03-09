@@ -38,6 +38,10 @@
       "eas": {
         "projectId": "ef236fd3-e86c-4466-8368-f457b61b77d2"
       }
+    },
+    "infoPlist": {
+      "NSCameraUsageDescription": "Scan grocery receipts",
+      "NSPhotoLibraryUsageDescription": "Upload receipt photos"
     }
   }
 }

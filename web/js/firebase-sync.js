@@ -95,7 +95,7 @@ function loadCustomItemsFromCloud() {
 
 function syncBasketItemToCloud(item) {
   ensureWebAuth().then(uid => {
-    db.collection('sharedBasket').doc(String(item.itemId || item.name)).set({
+    db.collection('userBaskets').doc(uid).collection('items').doc(String(item.itemId || item.name)).set({
       ...item,
       addedBy: uid,
       updatedAt: Date.now(),
@@ -104,21 +104,27 @@ function syncBasketItemToCloud(item) {
 }
 
 function removeBasketItemFromCloud(itemId) {
-  db.collection('sharedBasket').doc(String(itemId)).delete()
-    .catch(e => console.warn('[Firestore] basket remove error:', e));
+  ensureWebAuth().then(uid => {
+    db.collection('userBaskets').doc(uid).collection('items').doc(String(itemId)).delete()
+      .catch(e => console.warn('[Firestore] basket remove error:', e));
+  });
 }
 
 function clearBasketInCloud() {
-  db.collection('sharedBasket').get().then(snapshot => {
-    snapshot.docs.forEach(d => d.ref.delete());
-  }).catch(e => console.warn('[Firestore] basket clear error:', e));
+  ensureWebAuth().then(uid => {
+    db.collection('userBaskets').doc(uid).collection('items').get().then(snapshot => {
+      snapshot.docs.forEach(d => d.ref.delete());
+    }).catch(e => console.warn('[Firestore] basket clear error:', e));
+  });
 }
 
 function subscribeToBasket(onChange) {
-  return db.collection('sharedBasket').onSnapshot(snapshot => {
-    const cloudBasket = snapshot.docs.map(d => d.data());
-    onChange(cloudBasket);
-  }, err => {
-    console.warn('[Firestore] basket listener error:', err);
+  ensureWebAuth().then(uid => {
+    db.collection('userBaskets').doc(uid).collection('items').onSnapshot(snapshot => {
+      const cloudBasket = snapshot.docs.map(d => d.data());
+      onChange(cloudBasket);
+    }, err => {
+      console.warn('[Firestore] basket listener error:', err);
+    });
   });
 }

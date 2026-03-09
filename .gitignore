@@ -1,3 +1,16 @@
+# Ignore logo and unnecessary assets
+mobile/assets/logo.png
+mobile/assets/*.jpg
+mobile/assets/*.svg
+mobile/assets/*.jpeg
+# Ignore environment and local config
+.env
+# Ignore node_modules
+node_modules/
+# Ignore Python cache and environment
+__pycache__/
+scraper/.env
+scraper/.venv/
 # OS
 .DS_Store
 

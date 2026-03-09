@@ -1,0 +1,68 @@
+name: Scrape Weekly Offers
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'   # Every Monday 7:00 AM UTC (8am Irish time)
+  workflow_dispatch:        # Manual trigger from GitHub UI anytime
+
+permissions:
+  contents: write
+
+jobs:
+  scrape-offers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 lxml python-dotenv
+
+      - name: Run offers scraper
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          cd scraper
+          python scrape_offers.py \
+            --data ../mobile/shared/data.json \
+            --output ../mobile/shared/offers.json
+          echo "Scraper finished"
+
+      - name: Check offer count
+        id: check
+        run: |
+          COUNT=$(python3 -c "
+          import json
+          try:
+            with open('mobile/shared/offers.json') as f:
+              data = json.load(f)
+            print(len(data.get('offers', [])))
+          except:
+            print(0)
+          ")
+          echo "offer_count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Offers found: $COUNT"
+
+      - name: Commit offers (found)
+        if: steps.check.outputs.offer_count != '0'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mobile/shared/offers.json
+          git diff --staged --quiet || git commit -m "chore: weekly offers update $(date '+%Y-%m-%d') — ${{ steps.check.outputs.offer_count }} offers"
+          git push
+
+      - name: Commit empty state (none found)
+        if: steps.check.outputs.offer_count == '0'
+        run: |
+          echo '{"updatedAt":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","offers":[]}' > mobile/shared/offers.json
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mobile/shared/offers.json
+          git diff --staged --quiet || git commit -m "chore: weekly offers update $(date '+%Y-%m-%d') — no offers found"
+          git push

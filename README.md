@@ -3,6 +3,7 @@
 BasketBuddy is a full-stack grocery price comparison platform for Dublin shoppers. It tracks prices of grocery items across Tesco, Lidl, Aldi, Asian Supermarket, and Super Value. Available as a progressive web app and a native Android app, with real-time cloud sync for custom items and baskets.
 
 ## Features
+**Expo SDK 54, React 19, TypeScript 5.9, Firebase 12, EAS Build, Groq/Anthropic AI, and full CI/CD.**
 - Compare prices across 5 Dublin grocery stores
 - Smart basket with AI optimizer
 - Receipt splitter
@@ -12,6 +13,7 @@ BasketBuddy is a full-stack grocery price comparison platform for Dublin shopper
 - Android APK and PWA
 
 ## Architecture
+**Mobile:** React Native Expo SDK 54, TypeScript 5.9, React 19
 - **Web:** Vanilla HTML/CSS/JS PWA
 - **Mobile:** React Native Expo SDK 52, TypeScript
 - **Backend:** Firebase Firestore, Anonymous Auth
@@ -179,10 +181,10 @@ Each item shows a **5-week bar chart** with one bar per week per store, color-co
 | **Web Frontend** | Vanilla HTML/CSS/JS | — | Zero build step, instant deploy, tiny ~50 KB bundle |
 | **Web Styling** | CSS Custom Properties | — | 360-line stylesheet, mobile-first, `--orange`, `--tesco`, etc. |
 | **Web Fonts** | Fredoka One + Nunito | — | Playful headings + readable body text |
-| **Mobile Frontend** | React Native + Expo | SDK 52, RN 0.76.7 | Cross-platform from one TypeScript codebase |
-| **Mobile Navigation** | Expo Router | ~4.0.0 | File-based routing, same mental model as Next.js |
+| **Mobile Frontend** | React Native + Expo | SDK 54, RN 0.81.5 | Cross-platform from one TypeScript codebase |
+| **Mobile Navigation** | Expo Router | ~6.0.23 | File-based routing, same mental model as Next.js |
 | **Mobile State** | React Context | — | `BasketContext` for shared basket state across screens |
-| **Language** | TypeScript | ~5.3.3 | Type-safe data layer, shared interfaces (`Store`, `Item`, `BasketItem`) |
+| **Language** | TypeScript | ~5.9.2 | Type-safe data layer, shared interfaces (`Store`, `Item`, `BasketItem`) |
 | **Cloud Database** | Firebase Firestore | v10.12.0 (web), v12.10.0 (mobile) | Real-time `onSnapshot` sync, offline-first caching |
 | **Authentication** | Firebase Auth (Anonymous) | — | Instant UID, no sign-up friction, enables security rules |
 | **AI (Free)** | Groq | Llama 3.3 70B | Free API, basket optimizer tips, scraper query generation |
@@ -193,7 +195,7 @@ Each item shows a **5-week bar chart** with one bar per week per store, color-co
 | **CI/CD (Mobile)** | EAS Workflows | — | `build.yml` → auto-build APK on push to `main` |
 | **Scraping** | Playwright + Requests | — | Headless Chrome for Tesco.ie, HTTP API for Lidl.ie |
 | **Data Pipeline** | Python 3 | — | CSV → JS/JSON code generation, synthetic price history |
-| **Local Storage** | AsyncStorage | 1.23.1 | Custom stores persistence on mobile |
+| **Local Storage** | AsyncStorage | 2.2.0 | Custom stores persistence on mobile |
 
 ---
 
@@ -224,9 +226,9 @@ BasketBuddy/
 │       └── app.js                      # [73 lines] Boot + Firestore subscription
 │
 ├── mobile/                             # ── React Native (Expo) ──────────────
-│   ├── app.json                        # [45 lines] Expo config, owner: dvbydt
+│   ├── app.json                        # [45 lines] Expo config, owner: dvbydt, SDK 54
 │   ├── eas.json                        # [27 lines] Build profiles (dev/preview/prod)
-│   ├── package.json                    # [32 lines] Dependencies (Expo 52, Firebase 12)
+│   ├── package.json                    # [32 lines] Dependencies (Expo 54, Firebase 12, React 19, TypeScript 5.9)
 │   ├── tsconfig.json                   # [10 lines] TypeScript config (strict mode)
 │   ├── babel.config.js                 # Babel preset for Expo
 │   ├── .eas/
@@ -301,6 +303,7 @@ python3 -m http.server 8080
 ```
 
 ### Mobile App (local development)
+**Expo SDK 54, React 19, TypeScript 5.9, Firebase 12, EAS Build**
 
 ```bash
 cd mobile
@@ -308,9 +311,59 @@ npm install
 npx expo start
 
 # Options:
-#   Scan QR code with Expo Go on your phone
+#   Scan QR code with Expo Go (SDK 54) on your phone
 #   Press 'a' to open Android emulator
 #   Press 'w' for web preview
+### Upgrade Guide (Expo SDK 54)
+
+If you are upgrading from an older Expo SDK:
+
+1. Update all dependencies in mobile/package.json to the required versions:
+  - "expo": "~54.0.0"
+  - "react": "19.1.0"
+  - "react-dom": "19.1.0"
+  - "react-native": "0.81.5"
+  - "@expo/vector-icons": "^15.0.3"
+  - "@react-native-async-storage/async-storage": "2.2.0"
+  - "expo-router": "~6.0.23"
+  - "react-native-safe-area-context": "~5.6.0"
+  - "react-native-screens": "~4.16.0"
+  - "react-native-web": "^0.21.0"
+  - "typescript": "~5.9.2"
+  - "@types/react": "~19.1.10"
+2. Update tsconfig.json:
+  - Add "jsx": "react-jsx"
+  - Add "esModuleInterop": true
+3. Run:
+  ```bash
+  rm -rf node_modules package-lock.json
+  npm install --legacy-peer-deps
+  npx expo-doctor
+  ```
+4. Fix any breaking changes in your code (JSX, imports, types).
+5. Use Expo Go SDK 54 on your device.
+
+**Troubleshooting:**
+- If you see "Project is incompatible with this version of Expo Go", check your expo version and dependencies.
+- If splash or opening screen logo is stretched, use a square PNG and set resizeMode to "contain" in app.json.
+- For opening screen UI, center the logo and remove excessive shadow/background in your screen component.
+### Splash & Opening Screen Customization
+
+**Splash Screen:**
+- Use a square PNG (e.g., 512x512) for the splash image.
+- Set resizeMode to "contain" and backgroundColor to match your brand.
+- Example app.json:
+  ```json
+  "splash": {
+    "image": "./assets/splash-icon.png",
+    "resizeMode": "contain",
+    "backgroundColor": "#FFF9F0"
+  }
+  ```
+
+**Opening Screen:**
+- Center the logo, use minimal background/shadow, and add padding/margin for a modern look.
+- Edit your opening screen component (e.g., Home.tsx) to improve logo display.
 ```
 
 ### Build Android APK
@@ -742,6 +795,8 @@ interface BasketItem {
 ---
 
 ## 🗺️ Roadmap
+**Latest Upgrades:**
+- Expo SDK 54, React 19, TypeScript 5.9, Firebase 12, EAS Build, Groq/Anthropic AI, full CI/CD, improved splash/opening screen customization.
 
 - [ ] 📷 **AI Receipt Scanner** — snap a receipt photo, auto-extract items (Anthropic Vision ready, UI planned)
 - [ ] 🍎 **iOS Build** — App Store submission via EAS

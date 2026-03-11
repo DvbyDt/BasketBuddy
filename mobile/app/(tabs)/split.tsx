@@ -289,14 +289,16 @@ Rules:
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Start over', style: 'destructive', onPress: () => {
-          setStep('capture');
-          setImageUri(null);
-          setImageBase64(null);
-          setReceiptItems([]);
-          setPeople([
-            { name: 'Me',   emoji: '🧍', color: '#2196F3' },
-            { name: 'Them', emoji: '👤', color: '#4CAF50' },
-          ]);
+              // Reset all UI state
+              setStep('capture');
+              setImageUri(null);
+              setImageBase64(null);
+              setReceiptItems([]);
+              setPeople([
+                { name: 'Me',   emoji: '🧍', color: '#2196F3' },
+                { name: 'Them', emoji: '👤', color: '#4CAF50' },
+              ]);
+              Alert.alert('Reset', 'Receipt split UI has been reset.');
         }
       },
     ]);

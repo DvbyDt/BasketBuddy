@@ -82,7 +82,12 @@ export default function BasketScreen() {
   const handleClear = () => {
     Alert.alert('Clear Basket', 'Remove all items?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Clear', style: 'destructive', onPress: () => { clearBasket(); setOptimized(false); } },
+      { text: 'Clear', style: 'destructive', onPress: () => {
+          clearBasket();
+          setOptimized(false);
+          Alert.alert('Basket cleared', 'All items have been removed.');
+        }
+      },
     ]);
   };
 

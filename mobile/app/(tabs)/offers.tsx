@@ -1,29 +1,42 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, Alert,
+  StyleSheet, SafeAreaView, Alert, RefreshControl,
 } from 'react-native';
-import { COLORS, SHADOWS } from '../../shared/theme';
+import { COLORS, SHADOWS, RADIUS, FONTS, SPACING } from '../../shared/theme';
 import { items, getStoreById, fmt } from '../../shared/store';
 import {
   loadOffers, getActiveOffers, calcDiscount,
   hasOffers, getOffersUpdatedAt, Offer,
 } from '../../shared/offers';
 import { useBasket } from '../../shared/BasketContext';
+import ShimmerLoader from '../../components/ShimmerLoader';
 
 const STORE_ORDER = ['tesco', 'lidl', 'aldi', 'supervalue'];
 
 export default function OffersScreen() {
-  const [ready, setReady] = useState(false);
+  const [loadState, setLoadState] = useState<'loading' | 'done'>('loading');
+  const [refreshing, setRefreshing]       = useState(false);
   const [selectedStore, setSelectedStore] = useState('all');
-  const { addToBasket, isInBasket } = useBasket();
+  const { addToBasket, isInBasket }       = useBasket();
 
-  useEffect(() => {
-    loadOffers().then(() => setReady(true));
-  }, []);
+  const doLoad = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoadState('loading');
 
-  const activeOffers = useMemo(() => (ready ? getActiveOffers() : []), [ready]);
-  const updatedAt    = getOffersUpdatedAt();
+    await loadOffers(/* forceReload= */ isRefresh);
+
+    if (isRefresh) setRefreshing(false);
+    else setLoadState('done');
+  };
+
+  useEffect(() => { doLoad(); }, []);
+
+  const activeOffers = useMemo(
+    () => loadState === 'done' ? getActiveOffers() : [],
+    [loadState]
+  );
+  const updatedAt = getOffersUpdatedAt();
 
   const filtered = selectedStore === 'all'
     ? activeOffers
@@ -44,7 +57,7 @@ export default function OffersScreen() {
       return;
     }
     addToBasket(item, offer.storeId, 1);
-    Alert.alert('Added! 🛒', `${offer.itemName} added to basket with offer applied.`);
+    Alert.alert('Added! 🛒', `${offer.itemName} added to basket.`);
   };
 
   const handleAddAll = (storeId: string) => {
@@ -59,68 +72,115 @@ export default function OffersScreen() {
     });
     Alert.alert(
       added > 0 ? 'Added to basket! 🛒' : 'Nothing new to add',
-      added > 0 ? `${added} offer item${added > 1 ? 's' : ''} added.` : 'All offer items are already in your basket.'
+      added > 0
+        ? `${added} offer item${added > 1 ? 's' : ''} added.`
+        : 'All offer items are already in your basket.'
     );
   };
 
-  // ── Empty state ─────────────────────────────────────────────────
-  if (ready && !hasOffers()) {
+  // ── Shimmer loading state ────────────────────────────────────────
+  if (loadState === 'loading') {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.headerBar}>
+          <Text style={styles.headerTitle}>🏷️ Weekly Offers</Text>
+          <Text style={styles.headerSub}>Checking for deals…</Text>
+        </View>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <ShimmerLoader type="offers-screen" />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Empty state — no offers found by scraper ─────────────────────
+  if (!hasOffers()) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.headerBar}>
           <Text style={styles.headerTitle}>🏷️ Weekly Offers</Text>
         </View>
-        <View style={styles.emptyFull}>
-          <Text style={styles.emptyIcon}>🔍</Text>
-          <Text style={styles.emptyTitle}>No offers right now</Text>
-          <Text style={styles.emptyBody}>
-            We check Tesco, Lidl, Aldi and SuperValu every Monday for the latest deals.
-            As soon as we find something we'll show it here!
-          </Text>
-          {updatedAt && (
-            <Text style={styles.lastChecked}>
-              Last checked: {formatDate(updatedAt)}
+        <ScrollView
+          contentContainerStyle={styles.emptyContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => doLoad(true)}
+              tintColor={COLORS.primary}
+            />
+          }
+        >
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyIcon}>🔍</Text>
+            <Text style={styles.emptyTitle}>No offers right now</Text>
+            <Text style={styles.emptyBody}>
+              We scrape Tesco, Lidl, Aldi and SuperValu every Monday morning for real deals.
+              Only verified offers appear here — we never show made-up discounts.
             </Text>
-          )}
-        </View>
+
+            {updatedAt && (
+              <View style={styles.lastCheckedRow}>
+                <Text style={styles.lastCheckedLabel}>Last checked</Text>
+                <Text style={styles.lastCheckedValue}>{formatDate(updatedAt)}</Text>
+              </View>
+            )}
+
+            <View style={styles.nextCheckRow}>
+              <Text style={styles.nextCheckLabel}>Next check</Text>
+              <Text style={styles.nextCheckValue}>Monday 7am</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.refreshBtn}
+              onPress={() => doLoad(true)}
+            >
+              <Text style={styles.refreshBtnText}>↻ Pull to refresh</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Explain what this tab does */}
+          <View style={styles.explainCard}>
+            <Text style={styles.explainTitle}>How Offers Work</Text>
+            <ExplainRow icon="🤖" text="Our scraper runs every Monday using headless Chrome to read live store websites" />
+            <ExplainRow icon="🔗" text="Offers are matched to items in our catalog so you can add them to your basket" />
+            <ExplainRow icon="✅" text="Only real, verified offers are shown — if nothing is found, this screen stays empty" />
+            <ExplainRow icon="📱" text="Pull down on this screen to force a refresh anytime" />
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
 
-  // ── Loading ─────────────────────────────────────────────────────
-  if (!ready) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.emptyFull}>
-          <Text style={styles.emptyBody}>Loading offers…</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // ── Offers found ────────────────────────────────────────────────
+  // ── Offers found ─────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.headerBar}>
         <View>
           <Text style={styles.headerTitle}>🏷️ Weekly Offers</Text>
-          <Text style={styles.headerSub}>{activeOffers.length} deals this week</Text>
+          <Text style={styles.headerSub}>
+            {activeOffers.length} deals · {updatedAt ? `Updated ${formatDate(updatedAt)}` : ''}
+          </Text>
         </View>
       </View>
 
-      {/* Store filter tabs */}
+      {/* Store filter chips */}
       <ScrollView
         horizontal showsHorizontalScrollIndicator={false}
         style={styles.filterScroll}
-        contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
+        contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingVertical: 8 }}
       >
-        <FilterTab label="All" count={activeOffers.length} active={selectedStore === 'all'} onPress={() => setSelectedStore('all')} />
+        <FilterChip
+          label="All"
+          count={activeOffers.length}
+          active={selectedStore === 'all'}
+          onPress={() => setSelectedStore('all')}
+        />
         {STORE_ORDER.map(sid => {
           const store = getStoreById(sid);
           const count = activeOffers.filter(o => o.storeId === sid).length;
           if (!store || count === 0) return null;
           return (
-            <FilterTab
+            <FilterChip
               key={sid}
               label={`${store.emoji} ${store.name}`}
               count={count}
@@ -132,26 +192,42 @@ export default function OffersScreen() {
         })}
       </ScrollView>
 
-      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 32 }}>
-        {/* Savings banner */}
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{ paddingBottom: 32 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => doLoad(true)}
+            tintColor={COLORS.primary}
+          />
+        }
+      >
+        {/* Total savings banner */}
         <SavingsBanner offers={filtered} />
 
-        {/* Offers by store */}
+        {/* Offers grouped by store */}
         {(selectedStore === 'all' ? STORE_ORDER : [selectedStore]).map(sid => {
           const storeOffers = byStore[sid];
           if (!storeOffers?.length) return null;
           const store = getStoreById(sid);
           if (!store) return null;
+
           return (
             <View key={sid} style={styles.storeSection}>
-              <View style={styles.storeHeader}>
+              <View style={styles.storeSectionHeader}>
                 <View style={[styles.storeDot, { backgroundColor: store.color }]} />
-                <Text style={styles.storeName}>{store.emoji} {store.name}</Text>
-                <Text style={styles.offerCount}>{storeOffers.length} offers</Text>
-                <TouchableOpacity style={[styles.addAllBtn, { backgroundColor: store.color }]} onPress={() => handleAddAll(sid)}>
+                <Text style={styles.storeSectionName}>{store.emoji} {store.name}</Text>
+                <Text style={styles.storeSectionCount}>{storeOffers.length} offers</Text>
+                <TouchableOpacity
+                  style={[styles.addAllBtn, { backgroundColor: store.color }]}
+                  onPress={() => handleAddAll(sid)}
+                >
                   <Text style={styles.addAllText}>+ Add all</Text>
                 </TouchableOpacity>
               </View>
+
               {storeOffers.map(offer => (
                 <OfferCard
                   key={offer.id}
@@ -166,9 +242,9 @@ export default function OffersScreen() {
         })}
 
         {filtered.length === 0 && (
-          <View style={styles.empty}>
-            <Text style={{ fontSize: 40 }}>🏷️</Text>
-            <Text style={styles.emptyText}>No offers for this store right now</Text>
+          <View style={styles.noStoreOffers}>
+            <Text style={{ fontSize: 36, marginBottom: 8 }}>🏷️</Text>
+            <Text style={styles.noStoreOffersText}>No offers for this store right now</Text>
           </View>
         )}
       </ScrollView>
@@ -178,17 +254,20 @@ export default function OffersScreen() {
 
 // ── Sub-components ────────────────────────────────────────────────
 
-function FilterTab({ label, count, active, color, onPress }: {
+function FilterChip({ label, count, active, color, onPress }: {
   label: string; count: number; active: boolean; color?: string; onPress: () => void;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.filterTab, active && { backgroundColor: color || COLORS.primary, borderColor: color || COLORS.primary }]}
+      style={[
+        styles.filterChip,
+        active && { backgroundColor: color || COLORS.primary, borderColor: color || COLORS.primary },
+      ]}
       onPress={onPress}
     >
-      <Text style={[styles.filterTabText, active && { color: '#fff' }]}>{label}</Text>
-      <View style={[styles.filterBadge, active && { backgroundColor: 'rgba(255,255,255,0.3)' }]}>
-        <Text style={[styles.filterBadgeText, active && { color: '#fff' }]}>{count}</Text>
+      <Text style={[styles.filterChipText, active && { color: '#fff' }]}>{label}</Text>
+      <View style={[styles.filterChipBadge, active && { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
+        <Text style={[styles.filterChipBadgeText, active && { color: '#fff' }]}>{count}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -197,6 +276,7 @@ function FilterTab({ label, count, active, color, onPress }: {
 function SavingsBanner({ offers }: { offers: Offer[] }) {
   let total = 0;
   offers.forEach(o => {
+    if (!o.itemId) return;
     const item = items.find(i => i.id === o.itemId);
     if (!item) return;
     const base = item.prices[o.storeId];
@@ -204,6 +284,7 @@ function SavingsBanner({ offers }: { offers: Offer[] }) {
     total += calcDiscount(o, base, 1).saving;
   });
   if (total < 0.01) return null;
+
   return (
     <View style={styles.savingsBanner}>
       <Text style={{ fontSize: 28 }}>💰</Text>
@@ -218,27 +299,29 @@ function SavingsBanner({ offers }: { offers: Offer[] }) {
 function OfferCard({ offer, storeColor, inBasket, onAdd }: {
   offer: Offer; storeColor: string; inBasket: boolean; onAdd: () => void;
 }) {
-  const item = items.find(i => i.id === offer.itemId);
-  const base = item?.prices[offer.storeId];
+  const item     = items.find(i => i.id === offer.itemId);
+  const base     = item?.prices[offer.storeId];
   const discount = base != null ? calcDiscount(offer, base, 1) : null;
 
-  const badgeColor: Record<string, string> = {
+  const badgeColors: Record<string, string> = {
     percentage: '#9B5DE5', fixed: COLORS.green,
     bogo: '#FF6B35', multibuy: '#F72585', fixed_price: COLORS.green,
   };
-  const bc = badgeColor[offer.discountType] ?? COLORS.green;
+  const bc = badgeColors[offer.discountType] ?? COLORS.green;
 
   return (
     <View style={[styles.offerCard, SHADOWS.card]}>
       <View style={[styles.offerAccent, { backgroundColor: storeColor }]} />
       <View style={styles.offerContent}>
-        <View style={styles.offerTop}>
+        <View style={styles.offerTopRow}>
           <Text style={styles.offerName} numberOfLines={2}>{offer.itemName}</Text>
           <View style={[styles.badge, { backgroundColor: bc + '20', borderColor: bc }]}>
             <Text style={[styles.badgeText, { color: bc }]}>{badgeLabel(offer)}</Text>
           </View>
         </View>
+
         <Text style={styles.offerDesc}>{offer.description}</Text>
+
         {discount && base != null && (
           <View style={styles.priceRow}>
             {offer.originalPrice != null && (
@@ -252,10 +335,14 @@ function OfferCard({ offer, storeColor, inBasket, onAdd }: {
             )}
           </View>
         )}
+
         <View style={styles.offerFooter}>
           <Text style={styles.validUntil}>Valid until {formatDate(offer.validUntil)}</Text>
           {!inBasket ? (
-            <TouchableOpacity style={[styles.addBtn, { backgroundColor: storeColor }]} onPress={onAdd}>
+            <TouchableOpacity
+              style={[styles.addBtn, { backgroundColor: storeColor }]}
+              onPress={onAdd}
+            >
               <Text style={styles.addBtnText}>+ Basket</Text>
             </TouchableOpacity>
           ) : (
@@ -269,20 +356,31 @@ function OfferCard({ offer, storeColor, inBasket, onAdd }: {
   );
 }
 
+function ExplainRow({ icon, text }: { icon: string; text: string }) {
+  return (
+    <View style={styles.explainRow}>
+      <Text style={styles.explainRowIcon}>{icon}</Text>
+      <Text style={styles.explainRowText}>{text}</Text>
+    </View>
+  );
+}
+
 function badgeLabel(offer: Offer): string {
   const map: Record<string, string> = {
     percentage: `${offer.value}% OFF`,
-    fixed: `€${offer.value.toFixed(2)} OFF`,
-    bogo: 'BOGO',
-    multibuy: 'MULTIBUY',
-    fixed_price: 'SPECIAL',
+    fixed:      `€${offer.value.toFixed(2)} OFF`,
+    bogo:       'BOGO FREE',
+    multibuy:   'MULTIBUY',
+    fixed_price:'SPECIAL',
   };
   return map[offer.discountType] ?? 'OFFER';
 }
 
 function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' });
+    return new Date(iso).toLocaleDateString('en-IE', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    });
   } catch { return iso; }
 }
 
@@ -290,69 +388,108 @@ function formatDate(iso: string): string {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  headerBar: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4 },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: COLORS.text },
-  headerSub: { fontSize: 13, fontWeight: '600', color: COLORS.muted, marginTop: 2 },
 
-  // Empty full-screen state
-  emptyFull: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyIcon: { fontSize: 56, marginBottom: 16 },
-  emptyTitle: { fontSize: 20, fontWeight: '800', color: COLORS.text, marginBottom: 12, textAlign: 'center' },
-  emptyBody: {
-    fontSize: 15, fontWeight: '600', color: COLORS.muted,
-    textAlign: 'center', lineHeight: 24, marginBottom: 16,
+  headerBar: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: 4 },
+  headerTitle: { fontSize: 22, fontWeight: FONTS.bold, color: COLORS.text },
+  headerSub:   { fontSize: 13, fontWeight: FONTS.medium, color: COLORS.muted, marginTop: 2 },
+
+  // Empty state
+  emptyContainer: { padding: 16 },
+  emptyCard: {
+    backgroundColor: COLORS.card, borderRadius: RADIUS.xl,
+    padding: 24, alignItems: 'center', ...SHADOWS.card, marginBottom: 12,
   },
-  lastChecked: { fontSize: 12, fontWeight: '600', color: COLORS.muted },
+  emptyIcon:  { fontSize: 52, marginBottom: 12 },
+  emptyTitle: { fontSize: 20, fontWeight: FONTS.bold, color: COLORS.text, marginBottom: 10, textAlign: 'center' },
+  emptyBody:  { fontSize: 14, fontWeight: FONTS.medium, color: COLORS.muted, textAlign: 'center', lineHeight: 22, marginBottom: 16 },
+  lastCheckedRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    width: '100%', paddingVertical: 8, borderTopWidth: 1, borderTopColor: COLORS.border,
+  },
+  lastCheckedLabel: { fontSize: 13, fontWeight: FONTS.semibold, color: COLORS.muted },
+  lastCheckedValue: { fontSize: 13, fontWeight: FONTS.bold, color: COLORS.text },
+  nextCheckRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    width: '100%', paddingVertical: 8, borderTopWidth: 1, borderTopColor: COLORS.border,
+  },
+  nextCheckLabel: { fontSize: 13, fontWeight: FONTS.semibold, color: COLORS.muted },
+  nextCheckValue: { fontSize: 13, fontWeight: FONTS.bold, color: COLORS.primary },
+  refreshBtn: {
+    marginTop: 16, paddingVertical: 10, paddingHorizontal: 20,
+    borderRadius: RADIUS.full, borderWidth: 1.5, borderColor: COLORS.border,
+  },
+  refreshBtnText: { fontSize: 13, fontWeight: FONTS.semibold, color: COLORS.muted },
 
-  filterScroll: { maxHeight: 52, marginVertical: 8 },
-  filterTab: {
+  // Explain card
+  explainCard: {
+    backgroundColor: COLORS.card, borderRadius: RADIUS.xl,
+    padding: 20, ...SHADOWS.card,
+  },
+  explainTitle: { fontSize: 15, fontWeight: FONTS.bold, color: COLORS.text, marginBottom: 14 },
+  explainRow: { flexDirection: 'row', gap: 12, marginBottom: 12, alignItems: 'flex-start' },
+  explainRowIcon: { fontSize: 18, marginTop: 1 },
+  explainRowText: { fontSize: 13, fontWeight: FONTS.medium, color: COLORS.muted, flex: 1, lineHeight: 20 },
+
+  // Filter chips
+  filterScroll: { maxHeight: 52 },
+  filterChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 20, borderWidth: 1.5,
+    borderRadius: RADIUS.full, borderWidth: 1.5,
     borderColor: COLORS.border, backgroundColor: COLORS.card,
   },
-  filterTabText: { fontWeight: '700', fontSize: 13, color: COLORS.text },
-  filterBadge: { backgroundColor: COLORS.chipBg, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 10 },
-  filterBadgeText: { fontSize: 11, fontWeight: '800', color: COLORS.primary },
+  filterChipText: { fontWeight: FONTS.semibold, fontSize: 13, color: COLORS.text },
+  filterChipBadge: { backgroundColor: COLORS.chipBg, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 10 },
+  filterChipBadgeText: { fontSize: 11, fontWeight: FONTS.bold, color: COLORS.primary },
 
   content: { flex: 1, paddingHorizontal: 16 },
+
+  // Savings banner
   savingsBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: COLORS.savingBg, borderRadius: 14,
+    backgroundColor: COLORS.savingBg, borderRadius: RADIUS.lg,
     padding: 14, marginBottom: 16, marginTop: 4,
     borderWidth: 1, borderColor: COLORS.green + '40',
   },
-  savingsBannerTitle: { fontSize: 15, fontWeight: '800', color: '#1a7a5e' },
-  savingsBannerSub: { fontSize: 12, fontWeight: '600', color: COLORS.muted, marginTop: 2 },
+  savingsBannerTitle: { fontSize: 15, fontWeight: FONTS.bold, color: '#1a7a5e' },
+  savingsBannerSub:   { fontSize: 12, fontWeight: FONTS.medium, color: COLORS.muted, marginTop: 2 },
 
-  storeSection: { marginBottom: 20 },
-  storeHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  storeDot: { width: 10, height: 10, borderRadius: 5 },
-  storeName: { fontSize: 16, fontWeight: '800', color: COLORS.text, flex: 1 },
-  offerCount: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
-  addAllBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
-  addAllText: { color: '#fff', fontWeight: '800', fontSize: 12 },
+  // Store sections
+  storeSection:       { marginBottom: 20 },
+  storeSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  storeDot:           { width: 10, height: 10, borderRadius: 5 },
+  storeSectionName:   { fontSize: 16, fontWeight: FONTS.bold, color: COLORS.text, flex: 1 },
+  storeSectionCount:  { fontSize: 12, fontWeight: FONTS.semibold, color: COLORS.muted },
+  addAllBtn:          { paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.sm },
+  addAllText:         { color: '#fff', fontWeight: FONTS.bold, fontSize: 12 },
 
-  offerCard: { backgroundColor: COLORS.card, borderRadius: 14, marginBottom: 8, flexDirection: 'row', overflow: 'hidden' },
-  offerAccent: { width: 4 },
+  // Offer card
+  offerCard: {
+    backgroundColor: COLORS.card, borderRadius: RADIUS.lg,
+    marginBottom: 8, flexDirection: 'row', overflow: 'hidden',
+  },
+  offerAccent:  { width: 4 },
   offerContent: { flex: 1, padding: 12 },
-  offerTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 4 },
-  offerName: { fontSize: 14, fontWeight: '800', color: COLORS.text, flex: 1 },
+  offerTopRow: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    justifyContent: 'space-between', gap: 8, marginBottom: 4,
+  },
+  offerName: { fontSize: 14, fontWeight: FONTS.bold, color: COLORS.text, flex: 1 },
   badge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, borderWidth: 1, flexShrink: 0 },
-  badgeText: { fontSize: 10, fontWeight: '800' },
-  offerDesc: { fontSize: 12, fontWeight: '600', color: COLORS.muted, marginBottom: 6 },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  wasPrice: { fontSize: 13, fontWeight: '600', color: COLORS.muted, textDecorationLine: 'line-through' },
-  nowPrice: { fontSize: 16, fontWeight: '800', color: COLORS.green },
+  badgeText: { fontSize: 10, fontWeight: FONTS.bold },
+  offerDesc: { fontSize: 12, fontWeight: FONTS.medium, color: COLORS.muted, marginBottom: 6 },
+  priceRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  wasPrice:  { fontSize: 13, fontWeight: FONTS.medium, color: COLORS.muted, textDecorationLine: 'line-through' },
+  nowPrice:  { fontSize: 16, fontWeight: FONTS.bold, color: COLORS.green },
   savingPill: { backgroundColor: COLORS.savingBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  savingPillText: { fontSize: 11, fontWeight: '800', color: COLORS.green },
+  savingPillText: { fontSize: 11, fontWeight: FONTS.bold, color: COLORS.green },
   offerFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  validUntil: { fontSize: 11, fontWeight: '600', color: COLORS.muted },
-  addBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10 },
-  addBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  addedTag: { backgroundColor: COLORS.savingBg, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  addedTagText: { color: COLORS.green, fontWeight: '800', fontSize: 12 },
+  validUntil:  { fontSize: 11, fontWeight: FONTS.medium, color: COLORS.muted },
+  addBtn:      { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.sm },
+  addBtnText:  { color: '#fff', fontWeight: FONTS.bold, fontSize: 13 },
+  addedTag:    { backgroundColor: COLORS.savingBg, paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.sm },
+  addedTagText:{ color: COLORS.green, fontWeight: FONTS.bold, fontSize: 12 },
 
-  empty: { alignItems: 'center', marginTop: 40, gap: 8 },
-  emptyText: { fontSize: 15, fontWeight: '700', color: COLORS.muted },
+  noStoreOffers: { alignItems: 'center', marginTop: 40, gap: 8 },
+  noStoreOffersText: { fontSize: 15, fontWeight: FONTS.semibold, color: COLORS.muted },
 });

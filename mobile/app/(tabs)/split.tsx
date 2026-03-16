@@ -1,13 +1,29 @@
-import React, { useState, useCallback } from 'react';
+/**
+ * split.tsx — Receipt Splitter
+ *
+ * TECH STACK (all free):
+ *   OCR.space API  → reads text from receipt photo (free key from ocr.space/ocrapi)
+ *   Groq API       → parses raw OCR text into clean items (free key from console.groq.com)
+ *   expo-image-picker → camera + gallery access (already installed)
+ *
+ * FLOW:
+ *   1. Capture — take photo or upload
+ *   2. Scan    — OCR.space reads text, Groq parses items
+ *   3. People  — enter names of everyone splitting
+ *   4. Assign  — tap each item, tap a person to assign it
+ *   5. Summary — who owes what, discounts split proportionally
+ */
+
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, FlatList, ScrollView,
   TouchableOpacity, StyleSheet, SafeAreaView,
   Alert, Modal, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Image,
+  ActivityIndicator, Image, Animated,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { COLORS, SHADOWS } from '../../shared/theme';
+import { COLORS, SHADOWS, RADIUS, FONTS, SPACING } from '../../shared/theme';
 import { fmt } from '../../shared/store';
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -16,8 +32,8 @@ interface ReceiptItem {
   id: number;
   name: string;
   price: number;
-  isDiscount: boolean;          // true for offer/discount lines
-  assignedTo: number | null;   // person index, null = unassigned, -1 = shared
+  isDiscount: boolean;
+  assignedTo: number | null; // person index | -1 = shared equally | null = unassigned
 }
 
 interface Person {
@@ -29,28 +45,137 @@ interface Person {
 type Step = 'capture' | 'people' | 'assign' | 'summary';
 
 const PERSON_EMOJIS = ['🧍', '👤', '🙋', '🧑', '👱', '🧔'];
-const PERSON_COLORS = ['#2196F3', '#4CAF50', '#9C27B0', '#FF5722', '#FF9800', '#00BCD4'];
+const PERSON_COLORS = ['#3A86FF', '#2D6A4F', '#9B5DE5', '#FF6B35', '#FF9800', '#00BCD4'];
+
+// ── OCR + Parse pipeline ─────────────────────────────────────────
+//
+// Step 1: OCR.space reads the image → raw text
+// Step 2: Groq parses raw text → structured items JSON
+//
+// Both are free. OCR.space: 25,000 pages/month free.
+// Groq: unlimited free tier on Llama 3.3.
+
+async function scanReceiptWithOCR(
+  imageUri: string,
+  imageBase64: string
+): Promise<ReceiptItem[]> {
+
+  // Load keys from AsyncStorage (set in Settings screen)
+  const stored  = await AsyncStorage.getItem('basketbuddy_ai');
+  const settings = stored ? JSON.parse(stored) : {};
+
+  const ocrKey  = settings.ocrKey;
+  const groqKey = settings.groqKey || settings.key;
+
+  if (!ocrKey) throw new Error('NO_OCR_KEY');
+  if (!groqKey) throw new Error('NO_GROQ_KEY');
+
+  // ── Step 1: OCR.space ─────────────────────────────────────────
+  // Sends image as base64, returns extracted text.
+  // Free API key from: ocr.space/ocrapi/freekey
+
+  const ocrForm = new FormData();
+  ocrForm.append('base64Image', `data:image/jpeg;base64,${imageBase64}`);
+  ocrForm.append('language', 'eng');
+  ocrForm.append('isOverlayRequired', 'false');
+  ocrForm.append('detectOrientation', 'true');
+  ocrForm.append('scale', 'true');
+  ocrForm.append('OCREngine', '2'); // Engine 2 = better accuracy for receipts
+
+  const ocrResp = await fetch('https://api.ocr.space/parse/image', {
+    method: 'POST',
+    headers: { apikey: ocrKey },
+    body: ocrForm,
+  });
+
+  const ocrData = await ocrResp.json();
+
+  if (!ocrData?.ParsedResults?.[0]?.ParsedText) {
+    throw new Error('OCR could not read this image. Try better lighting or a clearer photo.');
+  }
+
+  const rawText = ocrData.ParsedResults[0].ParsedText as string;
+  console.log('[OCR] Raw text:', rawText.slice(0, 200));
+
+  if (rawText.trim().length < 10) {
+    throw new Error('Receipt text too short to parse. Is the photo clear and well-lit?');
+  }
+
+  // ── Step 2: Groq parses the OCR text ──────────────────────────
+  // Groq understands the messy OCR output and returns clean JSON.
+  // Free API key from: console.groq.com
+
+  const prompt = `You are parsing raw OCR text extracted from a grocery receipt photo.
+Your job is to identify every purchased item and return clean structured JSON.
+
+RAW OCR TEXT FROM RECEIPT:
+${rawText}
+
+RULES:
+- Regular purchased items → isDiscount: false, price as positive number
+- Discount/saving/offer/clubcard lines → isDiscount: true, price as positive number (we handle the sign)
+- SKIP these lines entirely: store name, address, date, time, subtotal, total, VAT, cash, card payment, receipt number, loyalty points, thank you messages
+- Fix obvious OCR errors: "1.S9" → 1.59, "€2,99" → 2.99, "MI1k" → "Milk"
+- If a price is completely unreadable, skip that item
+- Keep item names concise but clear (e.g. "Whole Milk 2L" not "WHL MLK 2LTR IRSH")
+
+Return ONLY this exact JSON format, no markdown, no explanation:
+{"items":[{"name":"Whole Milk 2L","price":1.59,"isDiscount":false},{"name":"Clubcard Saving","price":0.30,"isDiscount":true}]}`;
+
+  const groqResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${groqKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 1500,
+      temperature: 0.1, // low temperature = more consistent parsing
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+
+  const groqData = await groqResp.json();
+  const text     = groqData.choices?.[0]?.message?.content ?? '';
+  const clean    = text.replace(/```json|```/g, '').trim();
+
+  let parsed: { items: { name: string; price: number; isDiscount: boolean }[] };
+  try {
+    parsed = JSON.parse(clean);
+  } catch {
+    throw new Error('Could not parse receipt items. The receipt may be too blurry or at an angle.');
+  }
+
+  return (parsed.items ?? [])
+    .map((item, i) => ({
+      id:         i + 1,
+      name:       String(item.name ?? 'Unknown item').trim(),
+      price:      Math.abs(parseFloat(String(item.price)) || 0),
+      isDiscount: Boolean(item.isDiscount),
+      assignedTo: null,
+    }))
+    .filter(item => item.price > 0 && item.name.length > 0);
+}
 
 // ── Main Screen ───────────────────────────────────────────────────
 
 export default function SplitScreen() {
-  const [step, setStep]               = useState<Step>('capture');
-  const [imageUri, setImageUri]       = useState<string | null>(null);
-  const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const [scanning, setScanning]       = useState(false);
-  const [receiptItems, setReceiptItems] = useState<ReceiptItem[]>([]);
-  const [people, setPeople]           = useState<Person[]>([
-    { name: 'Me',   emoji: '🧍', color: '#2196F3' },
-    { name: 'Them', emoji: '👤', color: '#4CAF50' },
-  ]);
-  const [addPersonName, setAddPersonName] = useState('');
-  const [showAddPerson, setShowAddPerson] = useState(false);
+  const [step, setStep]                   = useState<Step>('capture');
+  const [imageUri, setImageUri]           = useState<string | null>(null);
+  const [scanning, setScanning]           = useState(false);
+  const [scanStatus, setScanStatus]       = useState('');
+  const [scanStep, setScanStep]           = useState(0); // 0=idle 1=ocr 2=groq 3=done
+  const [receiptItems, setReceiptItems]   = useState<ReceiptItem[]>([]);
+  const [people, setPeople]               = useState<Person[]>([]);
+  const [newPersonName, setNewPersonName] = useState('');
   const [showAddItem, setShowAddItem]     = useState(false);
   const [newItemName, setNewItemName]     = useState('');
   const [newItemPrice, setNewItemPrice]   = useState('');
   const [nextId, setNextId]               = useState(1);
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
 
-  // ── Step 1: Capture ─────────────────────────────────────────────
+  // ── Capture ──────────────────────────────────────────────────────
 
   const pickCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -59,128 +184,93 @@ export default function SplitScreen() {
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
+      quality: 0.9,
       base64: true,
-      quality: 0.8,
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
     });
     if (!result.canceled && result.assets[0]) {
       setImageUri(result.assets[0].uri);
-      setImageBase64(result.assets[0].base64 ?? null);
-      await scanReceipt(result.assets[0].base64 ?? null);
+      await doScan(result.assets[0].uri, result.assets[0].base64 ?? '');
     }
   };
 
   const pickGallery = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
+      quality: 0.9,
       base64: true,
-      quality: 0.8,
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
     });
     if (!result.canceled && result.assets[0]) {
       setImageUri(result.assets[0].uri);
-      setImageBase64(result.assets[0].base64 ?? null);
-      await scanReceipt(result.assets[0].base64 ?? null);
+      await doScan(result.assets[0].uri, result.assets[0].base64 ?? '');
     }
   };
 
-  const scanReceipt = async (base64: string | null) => {
-    if (!base64) return;
+  const doScan = async (uri: string, base64: string) => {
     setScanning(true);
+    setScanStep(1);
+    setScanStatus('Reading receipt…');
 
     try {
-      // Load Anthropic key from AsyncStorage
-      const stored = await AsyncStorage.getItem('basketbuddy_ai');
-      const settings = stored ? JSON.parse(stored) : {};
+      setScanStep(1);
+      setScanStatus('📷 Sending to OCR.space…');
+      await delay(300);
 
-      if (settings.provider !== 'anthropic' || !settings.key) {
-        Alert.alert(
-          'Anthropic key needed',
-          'Receipt scanning uses AI vision. Go to Settings and add an Anthropic API key (it\'s very cheap — ~€0.01 per scan).',
-          [{ text: 'OK' }]
-        );
-        setScanning(false);
-        // Let user add items manually
-        setStep('people');
-        return;
-      }
+      setScanStep(2);
+      setScanStatus('🤖 Groq is parsing items…');
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': settings.key,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1500,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: { type: 'base64', media_type: 'image/jpeg', data: base64 },
-              },
-              {
-                type: 'text',
-                text: `Extract all items from this grocery receipt.
+      const items = await scanReceiptWithOCR(uri, base64);
 
-Return ONLY valid JSON with this exact structure:
-{
-  "items": [
-    {"name": "Item name", "price": 1.99, "isDiscount": false},
-    {"name": "Clubcard Saving", "price": -0.50, "isDiscount": true}
-  ]
-}
+      setScanStep(3);
+      setScanStatus(`✅ Found ${items.length} items!`);
+      setReceiptItems(items);
+      setNextId(items.length + 1);
 
-Rules:
-- Include EVERY line item with a price
-- Discount/offer lines (Clubcard, loyalty, multibuy, savings) → isDiscount: true, price as NEGATIVE number
-- Regular items → isDiscount: false, price as POSITIVE number
-- If price is unclear, skip the item
-- No markdown, no explanation, just the JSON object`,
-              },
-            ],
-          }],
-        }),
-      });
-
-      const data = await response.json();
-      const text = data.content?.map((c: any) => c.text || '').join('') ?? '';
-      const clean = text.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(clean);
-
-      const extracted: ReceiptItem[] = (parsed.items ?? []).map((item: any, i: number) => ({
-        id: i + 1,
-        name: item.name,
-        price: parseFloat(item.price) || 0,
-        isDiscount: item.isDiscount ?? false,
-        assignedTo: null,
-      }));
-
-      setReceiptItems(extracted);
-      setNextId(extracted.length + 1);
+      await delay(800);
       setStep('people');
+
     } catch (e: any) {
-      console.error('Scan error:', e);
-      Alert.alert(
-        'Scan failed',
-        'Could not read the receipt. You can add items manually.',
-        [{ text: 'Add manually', onPress: () => setStep('people') }]
-      );
+      const msg = e.message ?? 'Unknown error';
+
+      if (msg === 'NO_OCR_KEY') {
+        Alert.alert(
+          'OCR.space key needed 🔑',
+          'Go to Settings and add your free OCR.space API key.\n\nGet one free at: ocr.space/ocrapi/freekey\n\nTakes 60 seconds, no credit card.',
+          [
+            { text: 'Add manually instead', onPress: () => { setReceiptItems([]); setStep('people'); } },
+            { text: 'OK' },
+          ]
+        );
+      } else if (msg === 'NO_GROQ_KEY') {
+        Alert.alert(
+          'Groq key needed 🔑',
+          'Go to Settings and add your free Groq API key.\n\nGet one free at: console.groq.com',
+          [
+            { text: 'Add manually instead', onPress: () => { setReceiptItems([]); setStep('people'); } },
+            { text: 'OK' },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Scan failed',
+          msg,
+          [{ text: 'Add items manually', onPress: () => { setReceiptItems([]); setStep('people'); } }]
+        );
+      }
     } finally {
       setScanning(false);
+      setScanStep(0);
+      setScanStatus('');
     }
   };
 
-  // ── Step 2: People ──────────────────────────────────────────────
+  // ── People ───────────────────────────────────────────────────────
 
   const addPerson = () => {
-    const name = addPersonName.trim();
+    const name = newPersonName.trim();
     if (!name) return;
     if (people.length >= 6) {
-      Alert.alert('Max 6 people', 'That\'s a big group — max 6 people for now!');
+      Alert.alert('Max 6 people');
       return;
     }
     const idx = people.length;
@@ -189,35 +279,32 @@ Rules:
       emoji: PERSON_EMOJIS[idx] ?? '🧑',
       color: PERSON_COLORS[idx] ?? '#607D8B',
     }]);
-    setAddPersonName('');
-    setShowAddPerson(false);
+    setNewPersonName('');
   };
 
   const removePerson = (idx: number) => {
-    if (people.length <= 2) {
-      Alert.alert('Minimum 2 people', 'Need at least 2 people to split a bill!');
-      return;
-    }
     setPeople(prev => prev.filter((_, i) => i !== idx));
-    // Unassign items assigned to removed person
     setReceiptItems(prev =>
-      prev.map(item => item.assignedTo === idx
-        ? { ...item, assignedTo: null }
-        : item
+      prev.map(item =>
+        item.assignedTo === idx ? { ...item, assignedTo: null } :
+        item.assignedTo !== null && item.assignedTo > idx
+          ? { ...item, assignedTo: item.assignedTo - 1 }
+          : item
       )
     );
   };
 
+  // ── Items ────────────────────────────────────────────────────────
+
   const addItemManually = () => {
-    const name = newItemName.trim();
+    const name  = newItemName.trim();
     const price = parseFloat(newItemPrice);
     if (!name || isNaN(price) || price === 0) {
       Alert.alert('Invalid', 'Enter a valid name and price');
       return;
     }
     setReceiptItems(prev => [...prev, {
-      id: nextId,
-      name,
+      id: nextId, name,
       price: Math.abs(price),
       isDiscount: price < 0,
       assignedTo: null,
@@ -228,7 +315,7 @@ Rules:
     setShowAddItem(false);
   };
 
-  // ── Step 3: Assign ──────────────────────────────────────────────
+  // ── Assign ───────────────────────────────────────────────────────
 
   const assignItem = (itemId: number, personIdx: number | -1) => {
     setReceiptItems(prev =>
@@ -238,32 +325,33 @@ Rules:
           : item
       )
     );
+    setSelectedItemId(null); // collapse after assigning
   };
 
   const assignAll = (personIdx: number | -1) => {
-    setReceiptItems(prev => prev.map(item => ({ ...item, assignedTo: personIdx })));
+    setReceiptItems(prev => prev.map(item =>
+      item.isDiscount ? item : { ...item, assignedTo: personIdx }
+    ));
   };
 
-  const unassignedCount = receiptItems.filter(
-    i => !i.isDiscount && i.assignedTo === null
-  ).length;
+  const regularItems   = receiptItems.filter(i => !i.isDiscount);
+  const discountItems  = receiptItems.filter(i => i.isDiscount);
+  const unassigned     = regularItems.filter(i => i.assignedTo === null).length;
+  const assigned       = regularItems.length - unassigned;
 
-  // ── Step 4: Summary ─────────────────────────────────────────────
+  // ── Summary ──────────────────────────────────────────────────────
 
-  const computeSummary = () => {
-    const totals = people.map(() => 0);
+  const computeSummary = useCallback(() => {
+    const totals: number[] = people.map(() => 0);
+    let totalBill      = 0;
     let totalDiscounts = 0;
-    let totalBill = 0;
 
-    // Sum regular items
     receiptItems.forEach(item => {
-      if (item.isDiscount) {
-        totalDiscounts += Math.abs(item.price); // accumulate discounts
-        return;
-      }
-      if (item.assignedTo === null) return; // unassigned, skip
+      if (item.isDiscount) { totalDiscounts += item.price; return; }
+      if (item.assignedTo === null) return;
+
       if (item.assignedTo === -1) {
-        // Shared — split equally
+        // Shared equally among all people
         const share = item.price / people.length;
         totals.forEach((_, i) => { totals[i] += share; });
       } else {
@@ -273,6 +361,7 @@ Rules:
     });
 
     // Distribute discounts proportionally
+    // Person who spent more gets more of the discount
     if (totalDiscounts > 0 && totalBill > 0) {
       totals.forEach((total, i) => {
         const proportion = total / totalBill;
@@ -280,25 +369,24 @@ Rules:
       });
     }
 
-    const grandTotal = totals.reduce((s, t) => s + t, 0);
-    return { totals, grandTotal, totalDiscounts };
-  };
+    return {
+      totals,
+      grandTotal:     totals.reduce((s, t) => s + t, 0),
+      totalDiscounts,
+      subtotal:       totalBill,
+    };
+  }, [receiptItems, people]);
 
   const resetAll = () => {
     Alert.alert('Start over?', 'This will clear everything.', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Start over', style: 'destructive', onPress: () => {
-              // Reset all UI state
-              setStep('capture');
-              setImageUri(null);
-              setImageBase64(null);
-              setReceiptItems([]);
-              setPeople([
-                { name: 'Me',   emoji: '🧍', color: '#2196F3' },
-                { name: 'Them', emoji: '👤', color: '#4CAF50' },
-              ]);
-              Alert.alert('Reset', 'Receipt split UI has been reset.');
+        text: 'Start over', style: 'destructive',
+        onPress: () => {
+          setStep('capture');
+          setImageUri(null);
+          setReceiptItems([]);
+          setPeople([]);
         }
       },
     ]);
@@ -308,25 +396,26 @@ Rules:
 
   return (
     <SafeAreaView style={styles.safe}>
+
       {/* Header */}
-      <View style={styles.headerBar}>
+      <View style={styles.header}>
         <Text style={styles.headerTitle}>🧾 Receipt Splitter</Text>
         {step !== 'capture' && (
-          <TouchableOpacity onPress={resetAll}>
-            <Text style={styles.resetBtn}>Reset</Text>
+          <TouchableOpacity onPress={resetAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.resetText}>Reset</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Progress steps */}
-      {step !== 'capture' && (
-        <StepIndicator current={step} />
-      )}
+      {/* Step progress indicator */}
+      {step !== 'capture' && <StepBar current={step} />}
 
       {/* ── STEP 1: Capture ── */}
       {step === 'capture' && (
         <CaptureStep
           scanning={scanning}
+          scanStatus={scanStatus}
+          scanStep={scanStep}
           imageUri={imageUri}
           onCamera={pickCamera}
           onGallery={pickGallery}
@@ -339,22 +428,38 @@ Rules:
         <PeopleStep
           people={people}
           receiptItems={receiptItems}
+          newPersonName={newPersonName}
+          onNewPersonNameChange={setNewPersonName}
+          onAddPerson={addPerson}
           onRemovePerson={removePerson}
-          onAddPerson={() => setShowAddPerson(true)}
           onAddItem={() => setShowAddItem(true)}
-          onRemoveItem={(id) => setReceiptItems(prev => prev.filter(i => i.id !== id))}
-          onNext={() => setStep('assign')}
+          onRemoveItem={id => setReceiptItems(prev => prev.filter(i => i.id !== id))}
+          onNext={() => {
+            if (people.length < 2) {
+              Alert.alert('Need at least 2 people', 'Add at least 2 people to split the bill.');
+              return;
+            }
+            if (regularItems.length === 0) {
+              Alert.alert('No items', 'Add at least one item to split.');
+              return;
+            }
+            setStep('assign');
+          }}
         />
       )}
 
-      {/* ── STEP 3: Assign ── */}
+      {/* ── STEP 3: Assign items ── */}
       {step === 'assign' && (
         <AssignStep
-          items={receiptItems}
+          regularItems={regularItems}
+          discountItems={discountItems}
           people={people}
+          assigned={assigned}
+          unassigned={unassigned}
+          selectedItemId={selectedItemId}
+          onSelectItem={id => setSelectedItemId(prev => prev === id ? null : id)}
           onAssign={assignItem}
           onAssignAll={assignAll}
-          unassignedCount={unassignedCount}
           onNext={() => setStep('summary')}
           onBack={() => setStep('people')}
         />
@@ -371,54 +476,23 @@ Rules:
         />
       )}
 
-      {/* Add person modal */}
-      <Modal visible={showAddPerson} transparent animationType="slide" onRequestClose={() => setShowAddPerson(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Add Person</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter name (e.g. Sarah)"
-              placeholderTextColor={COLORS.muted}
-              value={addPersonName}
-              onChangeText={setAddPersonName}
-              autoFocus
-              onSubmitEditing={addPerson}
-            />
-            <TouchableOpacity style={styles.btnPrimary} onPress={addPerson}>
-              <Text style={styles.btnPrimaryText}>Add Person</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.btnOutline, { marginTop: 8 }]} onPress={() => setShowAddPerson(false)}>
-              <Text style={styles.btnOutlineText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
       {/* Add item modal */}
       <Modal visible={showAddItem} transparent animationType="slide" onRequestClose={() => setShowAddItem(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Add Item</Text>
-            <Text style={styles.label}>Item name</Text>
+            <Text style={styles.modalTitle}>➕ Add Item</Text>
+            <Text style={styles.inputLabel}>Item name</Text>
             <TextInput
-              style={styles.input}
-              placeholder="e.g. Milk"
-              placeholderTextColor={COLORS.muted}
-              value={newItemName}
-              onChangeText={setNewItemName}
-              autoFocus
+              style={styles.input} placeholder="e.g. Whole Milk 2L"
+              placeholderTextColor={COLORS.muted} value={newItemName}
+              onChangeText={setNewItemName} autoFocus
             />
-            <Text style={styles.label}>Price (€) — use negative for discounts</Text>
+            <Text style={styles.inputLabel}>Price (negative = discount, e.g. -0.50)</Text>
             <TextInput
-              style={styles.input}
-              placeholder="e.g. 1.99 or -0.50 for discount"
-              placeholderTextColor={COLORS.muted}
-              keyboardType="decimal-pad"
-              value={newItemPrice}
-              onChangeText={setNewItemPrice}
+              style={styles.input} placeholder="1.99"
+              placeholderTextColor={COLORS.muted} keyboardType="decimal-pad"
+              value={newItemPrice} onChangeText={setNewItemPrice}
             />
             <TouchableOpacity style={styles.btnPrimary} onPress={addItemManually}>
               <Text style={styles.btnPrimaryText}>Add Item</Text>
@@ -433,25 +507,28 @@ Rules:
   );
 }
 
-// ── Step Indicator ────────────────────────────────────────────────
+// ── Step Progress Bar ─────────────────────────────────────────────
 
-function StepIndicator({ current }: { current: Step }) {
-  const steps: { key: Step; label: string }[] = [
-    { key: 'capture', label: '📷' },
-    { key: 'people',  label: '👥' },
-    { key: 'assign',  label: '✏️' },
-    { key: 'summary', label: '💸' },
-  ];
-  const currentIdx = steps.findIndex(s => s.key === current);
+function StepBar({ current }: { current: Step }) {
+  const steps = [
+    { key: 'capture', icon: '📷', label: 'Scan' },
+    { key: 'people',  icon: '👥', label: 'People' },
+    { key: 'assign',  icon: '✏️', label: 'Assign' },
+    { key: 'summary', icon: '💸', label: 'Done' },
+  ] as const;
+  const idx = steps.findIndex(s => s.key === current);
   return (
-    <View style={styles.stepIndicator}>
+    <View style={styles.stepBar}>
       {steps.map((s, i) => (
         <React.Fragment key={s.key}>
-          <View style={[styles.stepDot, i <= currentIdx && styles.stepDotActive]}>
-            <Text style={styles.stepDotText}>{s.label}</Text>
+          <View style={styles.stepItem}>
+            <View style={[styles.stepCircle, i <= idx && styles.stepCircleActive]}>
+              <Text style={{ fontSize: 15 }}>{s.icon}</Text>
+            </View>
+            <Text style={[styles.stepLabel, i <= idx && styles.stepLabelActive]}>{s.label}</Text>
           </View>
           {i < steps.length - 1 && (
-            <View style={[styles.stepLine, i < currentIdx && styles.stepLineActive]} />
+            <View style={[styles.stepLine, i < idx && styles.stepLineActive]} />
           )}
         </React.Fragment>
       ))}
@@ -461,138 +538,233 @@ function StepIndicator({ current }: { current: Step }) {
 
 // ── Step 1: Capture ───────────────────────────────────────────────
 
-function CaptureStep({ scanning, imageUri, onCamera, onGallery, onManual }: {
-  scanning: boolean;
-  imageUri: string | null;
-  onCamera: () => void;
-  onGallery: () => void;
-  onManual: () => void;
+function CaptureStep({ scanning, scanStatus, scanStep, imageUri, onCamera, onGallery, onManual }: {
+  scanning: boolean; scanStatus: string; scanStep: number;
+  imageUri: string | null; onCamera: () => void; onGallery: () => void; onManual: () => void;
 }) {
   if (scanning) {
     return (
-      <View style={styles.scanningView}>
-        {imageUri && <Image source={{ uri: imageUri }} style={styles.receiptPreview} resizeMode="contain" />}
+      <View style={styles.scanView}>
+        {imageUri && <Image source={{ uri: imageUri }} style={styles.scanThumb} resizeMode="contain" />}
         <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 24 }} />
-        <Text style={styles.scanningTitle}>Reading your receipt…</Text>
-        <Text style={styles.scanningSubtitle}>AI is extracting items and prices</Text>
+        <Text style={styles.scanStatusText}>{scanStatus}</Text>
+
+        {/* Pipeline steps */}
+        <View style={styles.pipeline}>
+          <PipelineStep icon="📷" label="Captured"  done={scanStep >= 1} active={scanStep === 1} />
+          <View style={styles.pipelineLine} />
+          <PipelineStep icon="🔍" label="OCR.space" done={scanStep >= 2} active={scanStep === 2} />
+          <View style={styles.pipelineLine} />
+          <PipelineStep icon="🤖" label="Groq AI"   done={scanStep >= 3} active={scanStep === 3} />
+        </View>
+        <Text style={styles.freeLabel}>100% Free · OCR.space + Groq</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.captureContainer}>
-      <Text style={styles.captureIcon}>🧾</Text>
-      <Text style={styles.captureTitle}>Scan Your Receipt</Text>
-      <Text style={styles.captureSubtitle}>
-        Take a photo or upload an image — AI will extract all items and prices automatically, including any discounts at the bottom.
+    <ScrollView contentContainerStyle={styles.captureScroll} showsVerticalScrollIndicator={false}>
+      <Text style={styles.captureHeroIcon}>🧾</Text>
+      <Text style={styles.captureHeroTitle}>Split Your Receipt</Text>
+      <Text style={styles.captureHeroSub}>
+        Take a photo of your receipt — we'll extract every item automatically using free AI tools.
       </Text>
 
-      {/* Camera button */}
-      <TouchableOpacity style={styles.captureBtn} onPress={onCamera}>
-        <Text style={styles.captureBtnIcon}>📷</Text>
-        <View>
-          <Text style={styles.captureBtnTitle}>Take a Photo</Text>
-          <Text style={styles.captureBtnSub}>Open camera and snap your receipt</Text>
+      <TouchableOpacity style={styles.captureCard} onPress={onCamera} activeOpacity={0.85}>
+        <View style={[styles.captureCardIcon, { backgroundColor: '#FFF3E0' }]}>
+          <Text style={{ fontSize: 30 }}>📷</Text>
         </View>
-      </TouchableOpacity>
-
-      {/* Upload button */}
-      <TouchableOpacity style={[styles.captureBtn, { backgroundColor: '#F3E8FF' }]} onPress={onGallery}>
-        <Text style={styles.captureBtnIcon}>🖼️</Text>
-        <View>
-          <Text style={[styles.captureBtnTitle, { color: '#7C3AED' }]}>Upload Image</Text>
-          <Text style={styles.captureBtnSub}>Choose from your photo library</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.captureCardTitle}>Take a Photo</Text>
+          <Text style={styles.captureCardSub}>Open camera and snap your receipt</Text>
         </View>
+        <Text style={styles.captureCardArrow}>→</Text>
       </TouchableOpacity>
 
-      {/* Manual entry */}
-      <TouchableOpacity style={styles.manualBtn} onPress={onManual}>
-        <Text style={styles.manualBtnText}>✏️ Enter items manually instead</Text>
+      <TouchableOpacity style={[styles.captureCard, { marginTop: 10, backgroundColor: '#F3E8FF' }]} onPress={onGallery} activeOpacity={0.85}>
+        <View style={[styles.captureCardIcon, { backgroundColor: '#EDE9FE' }]}>
+          <Text style={{ fontSize: 30 }}>🖼️</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.captureCardTitle, { color: '#7C3AED' }]}>Upload Image</Text>
+          <Text style={styles.captureCardSub}>Choose from your photo library</Text>
+        </View>
+        <Text style={[styles.captureCardArrow, { color: '#7C3AED' }]}>→</Text>
       </TouchableOpacity>
 
-      <View style={styles.aiNote}>
-        <Text style={styles.aiNoteText}>
-          🤖 Powered by Anthropic AI · Requires Anthropic key in Settings · ~€0.01 per scan
-        </Text>
+      <TouchableOpacity style={styles.manualLink} onPress={onManual}>
+        <Text style={styles.manualLinkText}>✏️ Enter items manually instead</Text>
+      </TouchableOpacity>
+
+      {/* Tips for good results */}
+      <View style={styles.tipsCard}>
+        <Text style={styles.tipsTitle}>📸 Tips for best results</Text>
+        <TipRow text="Lay the receipt flat on a surface" />
+        <TipRow text="Good lighting — avoid shadows across text" />
+        <TipRow text="Hold camera directly above, not at an angle" />
+        <TipRow text="Make sure all items are visible in frame" />
+      </View>
+
+      {/* Keys needed */}
+      <View style={styles.keysCard}>
+        <Text style={styles.keysTitle}>🔑 Keys needed (both free)</Text>
+        <View style={styles.keyRow}>
+          <Text style={styles.keyName}>OCR.space</Text>
+          <Text style={styles.keyUrl}>ocr.space/ocrapi/freekey</Text>
+        </View>
+        <View style={styles.keyRow}>
+          <Text style={styles.keyName}>Groq</Text>
+          <Text style={styles.keyUrl}>console.groq.com</Text>
+        </View>
+        <Text style={styles.keysNote}>Add both in Settings → AI Provider</Text>
       </View>
     </ScrollView>
   );
 }
 
-// ── Step 2: People + Items review ─────────────────────────────────
+function PipelineStep({ icon, label, done, active }: { icon: string; label: string; done?: boolean; active?: boolean }) {
+  return (
+    <View style={{ alignItems: 'center', gap: 4 }}>
+      <View style={[
+        styles.pipelineCircle,
+        done && { backgroundColor: COLORS.green + '30' },
+        active && { backgroundColor: COLORS.primary + '20' },
+      ]}>
+        <Text style={{ fontSize: 16 }}>{icon}</Text>
+      </View>
+      <Text style={[styles.pipelineLabel, done && { color: COLORS.green }, active && { color: COLORS.primary }]}>
+        {label}
+      </Text>
+    </View>
+  );
+}
 
-function PeopleStep({ people, receiptItems, onRemovePerson, onAddPerson, onAddItem, onRemoveItem, onNext }: {
-  people: Person[];
-  receiptItems: ReceiptItem[];
-  onRemovePerson: (i: number) => void;
-  onAddPerson: () => void;
-  onAddItem: () => void;
-  onRemoveItem: (id: number) => void;
+function TipRow({ text }: { text: string }) {
+  return (
+    <View style={styles.tipRow}>
+      <Text style={styles.tipDot}>•</Text>
+      <Text style={styles.tipText}>{text}</Text>
+    </View>
+  );
+}
+
+// ── Step 2: People ────────────────────────────────────────────────
+
+function PeopleStep({ people, receiptItems, newPersonName, onNewPersonNameChange,
+  onAddPerson, onRemovePerson, onAddItem, onRemoveItem, onNext }: {
+  people: Person[]; receiptItems: ReceiptItem[];
+  newPersonName: string; onNewPersonNameChange: (v: string) => void;
+  onAddPerson: () => void; onRemovePerson: (i: number) => void;
+  onAddItem: () => void; onRemoveItem: (id: number) => void;
   onNext: () => void;
 }) {
+  const regular   = receiptItems.filter(i => !i.isDiscount);
+  const discounts = receiptItems.filter(i => i.isDiscount);
+
   return (
-    <ScrollView style={styles.stepContent} contentContainerStyle={{ paddingBottom: 32 }}>
-      {/* People */}
+    <ScrollView style={styles.stepContent} contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+
+      {/* Add people */}
       <Text style={styles.sectionTitle}>👥 Who's splitting?</Text>
-      <Text style={styles.sectionSub}>Add everyone who's sharing this bill</Text>
+      <Text style={styles.sectionHint}>Add everyone sharing this bill (min. 2)</Text>
 
-      <View style={styles.peopleRow}>
-        {people.map((p, i) => (
-          <TouchableOpacity
-            key={i}
-            style={[styles.personChip, { borderColor: p.color, backgroundColor: p.color + '15' }]}
-            onLongPress={() => onRemovePerson(i)}
-          >
-            <Text style={styles.personChipEmoji}>{p.emoji}</Text>
-            <Text style={[styles.personChipName, { color: p.color }]}>{p.name}</Text>
-          </TouchableOpacity>
-        ))}
-        {people.length < 6 && (
-          <TouchableOpacity style={styles.addPersonChip} onPress={onAddPerson}>
-            <Text style={styles.addPersonText}>+ Add</Text>
-          </TouchableOpacity>
-        )}
+      {/* Input row */}
+      <View style={styles.addPersonRow}>
+        <TextInput
+          style={styles.addPersonInput}
+          placeholder="Enter a name…"
+          placeholderTextColor={COLORS.muted}
+          value={newPersonName}
+          onChangeText={onNewPersonNameChange}
+          onSubmitEditing={onAddPerson}
+          returnKeyType="done"
+        />
+        <TouchableOpacity
+          style={[styles.addPersonBtn, !newPersonName.trim() && { opacity: 0.4 }]}
+          onPress={onAddPerson}
+          disabled={!newPersonName.trim()}
+        >
+          <Text style={styles.addPersonBtnText}>Add</Text>
+        </TouchableOpacity>
       </View>
-      <Text style={styles.hintText}>Long-press a person to remove them</Text>
 
-      {/* Items review */}
-      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
-        🧾 Receipt Items {receiptItems.length > 0 ? `(${receiptItems.length})` : ''}
-      </Text>
-      <Text style={styles.sectionSub}>Review and edit before assigning</Text>
-
-      {receiptItems.length === 0 && (
-        <View style={styles.emptyItems}>
-          <Text style={styles.emptyItemsText}>No items yet — add them manually</Text>
+      {/* People pills */}
+      {people.length > 0 && (
+        <View style={styles.peopleWrap}>
+          {people.map((p, i) => (
+            <TouchableOpacity
+              key={i}
+              style={[styles.personPill, { borderColor: p.color, backgroundColor: p.color + '18' }]}
+              onLongPress={() => onRemovePerson(i)}
+            >
+              <Text style={styles.personEmoji}>{p.emoji}</Text>
+              <Text style={[styles.personName, { color: p.color }]}>{p.name}</Text>
+              <TouchableOpacity
+                onPress={() => onRemovePerson(i)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={[styles.personRemove, { color: p.color }]}>✕</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
         </View>
       )}
 
-      {receiptItems.map(item => (
-        <View key={item.id} style={[styles.reviewItem, item.isDiscount && styles.reviewItemDiscount]}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.reviewItemName} numberOfLines={1}>{item.name}</Text>
-            {item.isDiscount && <Text style={styles.discountLabel}>🏷️ Discount</Text>}
+      {people.length < 2 && (
+        <Text style={styles.validationHint}>
+          {people.length === 0 ? '👆 Add at least 2 people above' : '👆 Add one more person'}
+        </Text>
+      )}
+
+      <View style={styles.divider} />
+
+      {/* Receipt items review */}
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitle}>
+          🧾 Receipt Items ({regular.length})
+        </Text>
+        {discounts.length > 0 && (
+          <View style={styles.discountBadge}>
+            <Text style={styles.discountBadgeText}>🏷️ {discounts.length} discounts</Text>
           </View>
-          <Text style={[styles.reviewItemPrice, item.isDiscount && { color: COLORS.green }]}>
-            {item.isDiscount ? `-${fmt(Math.abs(item.price))}` : fmt(item.price)}
-          </Text>
-          <TouchableOpacity onPress={() => onRemoveItem(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.removeItemBtn}>✕</Text>
-          </TouchableOpacity>
+        )}
+      </View>
+      <Text style={styles.sectionHint}>Review and remove any misread items</Text>
+
+      {receiptItems.length === 0 ? (
+        <View style={styles.emptyItems}>
+          <Text style={{ fontSize: 32, marginBottom: 8 }}>📝</Text>
+          <Text style={styles.emptyItemsText}>No items yet</Text>
+          <Text style={styles.emptyItemsSub}>Scan a receipt above or add manually</Text>
         </View>
-      ))}
+      ) : (
+        receiptItems.map(item => (
+          <View key={item.id} style={[styles.reviewItem, item.isDiscount && styles.reviewItemDiscount]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.reviewItemName} numberOfLines={1}>{item.name}</Text>
+              {item.isDiscount && <Text style={styles.reviewDiscountLabel}>🏷️ Discount — shared proportionally</Text>}
+            </View>
+            <Text style={[styles.reviewItemPrice, item.isDiscount && { color: COLORS.green }]}>
+              {item.isDiscount ? `-${fmt(item.price)}` : fmt(item.price)}
+            </Text>
+            <TouchableOpacity onPress={() => onRemoveItem(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.reviewRemove}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        ))
+      )}
 
       <TouchableOpacity style={[styles.btnOutline, { marginTop: 12 }]} onPress={onAddItem}>
         <Text style={styles.btnOutlineText}>+ Add item manually</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.btnPrimary, { marginTop: 20 }]}
+        style={[styles.btnPrimary, { marginTop: 16, opacity: (people.length >= 2 && regular.length > 0) ? 1 : 0.4 }]}
         onPress={onNext}
-        disabled={receiptItems.filter(i => !i.isDiscount).length === 0}
+        disabled={people.length < 2 || regular.length === 0}
       >
         <Text style={styles.btnPrimaryText}>
-          Assign Items →
+          Assign {regular.length} Items →
         </Text>
       </TouchableOpacity>
     </ScrollView>
@@ -601,38 +773,31 @@ function PeopleStep({ people, receiptItems, onRemovePerson, onAddPerson, onAddIt
 
 // ── Step 3: Assign ────────────────────────────────────────────────
 
-function AssignStep({ items, people, onAssign, onAssignAll, unassignedCount, onNext, onBack }: {
-  items: ReceiptItem[];
-  people: Person[];
+function AssignStep({ regularItems, discountItems, people, assigned, unassigned,
+  selectedItemId, onSelectItem, onAssign, onAssignAll, onNext, onBack }: {
+  regularItems: ReceiptItem[]; discountItems: ReceiptItem[];
+  people: Person[]; assigned: number; unassigned: number;
+  selectedItemId: number | null;
+  onSelectItem: (id: number) => void;
   onAssign: (itemId: number, personIdx: number | -1) => void;
   onAssignAll: (personIdx: number | -1) => void;
-  unassignedCount: number;
-  onNext: () => void;
-  onBack: () => void;
+  onNext: () => void; onBack: () => void;
 }) {
-  const regularItems  = items.filter(i => !i.isDiscount);
-  const discountItems = items.filter(i => i.isDiscount);
+  const progress = regularItems.length > 0 ? assigned / regularItems.length : 0;
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Quick assign bar */}
-      <View style={styles.quickAssignBar}>
-        <Text style={styles.quickAssignLabel}>Assign all to:</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+      {/* Quick assign strip */}
+      <View style={styles.quickBar}>
+        <Text style={styles.quickBarLabel}>Quick assign all →</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
           {people.map((p, i) => (
-            <TouchableOpacity
-              key={i}
-              style={[styles.quickChip, { backgroundColor: p.color }]}
-              onPress={() => onAssignAll(i)}
-            >
+            <TouchableOpacity key={i} style={[styles.quickChip, { backgroundColor: p.color }]} onPress={() => onAssignAll(i)}>
               <Text style={styles.quickChipText}>{p.emoji} {p.name}</Text>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity
-            style={[styles.quickChip, { backgroundColor: '#607D8B' }]}
-            onPress={() => onAssignAll(-1)}
-          >
-            <Text style={styles.quickChipText}>½ Split all</Text>
+          <TouchableOpacity style={[styles.quickChip, { backgroundColor: '#607D8B' }]} onPress={() => onAssignAll(-1)}>
+            <Text style={styles.quickChipText}>½ Split equally</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -640,36 +805,90 @@ function AssignStep({ items, people, onAssign, onAssignAll, unassignedCount, onN
       <FlatList
         data={regularItems}
         keyExtractor={i => String(i.id)}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 130 }}
+        showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          unassignedCount > 0 ? (
-            <View style={styles.assignProgressBar}>
-              <Text style={styles.assignProgressText}>
-                {regularItems.length - unassignedCount}/{regularItems.length} items assigned
-              </Text>
-              <View style={styles.progressTrack}>
-                <View style={[
-                  styles.progressFill,
-                  { width: `${((regularItems.length - unassignedCount) / regularItems.length) * 100}%` }
-                ]} />
-              </View>
+          <View style={styles.progressWrap}>
+            <View style={styles.progressHeader}>
+              <Text style={styles.progressText}>{assigned}/{regularItems.length} assigned</Text>
+              {unassigned === 0 && <Text style={styles.progressDone}>✅ All done!</Text>}
             </View>
-          ) : null
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
+            </View>
+          </View>
         }
-        renderItem={({ item }) => (
-          <AssignCard item={item} people={people} onAssign={onAssign} />
-        )}
+        renderItem={({ item }) => {
+          const isSelected = selectedItemId === item.id;
+          const assignedPerson = item.assignedTo === -1
+            ? { name: 'Split equally', emoji: '½', color: '#607D8B' }
+            : item.assignedTo !== null
+              ? people[item.assignedTo]
+              : null;
+
+          return (
+            <TouchableOpacity
+              style={[styles.assignCard, SHADOWS.card, item.assignedTo === null && styles.assignCardUnassigned]}
+              onPress={() => onSelectItem(item.id)}
+              activeOpacity={0.85}
+            >
+              {/* Item row */}
+              <View style={styles.assignCardHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.assignCardName} numberOfLines={1}>{item.name}</Text>
+                  {assignedPerson && (
+                    <Text style={[styles.assignedLabel, { color: assignedPerson.color }]}>
+                      {assignedPerson.emoji} {assignedPerson.name}
+                    </Text>
+                  )}
+                  {!assignedPerson && (
+                    <Text style={styles.tapToAssign}>Tap to assign →</Text>
+                  )}
+                </View>
+                <Text style={styles.assignCardPrice}>{fmt(item.price)}</Text>
+                <Text style={styles.expandIcon}>{isSelected ? '▲' : '▼'}</Text>
+              </View>
+
+              {/* People buttons — only shown when item is selected */}
+              {isSelected && (
+                <View style={styles.assignButtons}>
+                  {people.map((p, i) => {
+                    const active = item.assignedTo === i;
+                    return (
+                      <TouchableOpacity
+                        key={i}
+                        style={[styles.assignBtn, { borderColor: p.color }, active && { backgroundColor: p.color }]}
+                        onPress={() => onAssign(item.id, i)}
+                      >
+                        <Text style={styles.assignBtnEmoji}>{p.emoji}</Text>
+                        <Text style={[styles.assignBtnName, active && { color: '#fff' }]}>{p.name}</Text>
+                        {active && <Text style={styles.assignBtnCheck}>✓</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                  {/* Split equally button */}
+                  <TouchableOpacity
+                    style={[styles.assignBtn, { borderColor: '#607D8B' }, item.assignedTo === -1 && { backgroundColor: '#607D8B' }]}
+                    onPress={() => onAssign(item.id, -1)}
+                  >
+                    <Text style={styles.assignBtnEmoji}>½</Text>
+                    <Text style={[styles.assignBtnName, item.assignedTo === -1 && { color: '#fff' }]}>Split</Text>
+                    {item.assignedTo === -1 && <Text style={styles.assignBtnCheck}>✓</Text>}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        }}
         ListFooterComponent={
           discountItems.length > 0 ? (
-            <View style={styles.discountSection}>
-              <Text style={styles.discountSectionTitle}>🏷️ Discounts (auto-distributed)</Text>
-              <Text style={styles.discountSectionSub}>
-                These will be split proportionally based on each person's share
-              </Text>
-              {discountItems.map(item => (
-                <View key={item.id} style={styles.discountRow}>
-                  <Text style={styles.discountRowName} numberOfLines={1}>{item.name}</Text>
-                  <Text style={styles.discountRowPrice}>-{fmt(Math.abs(item.price))}</Text>
+            <View style={styles.discountBox}>
+              <Text style={styles.discountBoxTitle}>🏷️ {discountItems.length} discount{discountItems.length > 1 ? 's' : ''} detected</Text>
+              <Text style={styles.discountBoxSub}>Automatically split based on each person's share of the bill</Text>
+              {discountItems.map(d => (
+                <View key={d.id} style={styles.discountBoxRow}>
+                  <Text style={styles.discountBoxName} numberOfLines={1}>{d.name}</Text>
+                  <Text style={styles.discountBoxPrice}>-{fmt(d.price)}</Text>
                 </View>
               ))}
             </View>
@@ -677,21 +896,18 @@ function AssignStep({ items, people, onAssign, onAssignAll, unassignedCount, onN
         }
       />
 
-      {/* Bottom actions */}
+      {/* Footer */}
       <View style={styles.assignFooter}>
-        {unassignedCount > 0 && (
-          <Text style={styles.unassignedWarning}>
-            ⚠️ {unassignedCount} item{unassignedCount > 1 ? 's' : ''} not yet assigned
+        {unassigned > 0 && (
+          <Text style={styles.unassignedWarn}>
+            ⚠️ {unassigned} item{unassigned > 1 ? 's' : ''} not assigned — will be excluded from totals
           </Text>
         )}
-        <View style={styles.assignFooterBtns}>
+        <View style={styles.footerBtns}>
           <TouchableOpacity style={styles.btnBack} onPress={onBack}>
             <Text style={styles.btnBackText}>← Back</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.btnPrimary, { flex: 1 }]}
-            onPress={onNext}
-          >
+          <TouchableOpacity style={[styles.btnPrimary, { flex: 1 }]} onPress={onNext}>
             <Text style={styles.btnPrimaryText}>See Summary →</Text>
           </TouchableOpacity>
         </View>
@@ -700,330 +916,234 @@ function AssignStep({ items, people, onAssign, onAssignAll, unassignedCount, onN
   );
 }
 
-function AssignCard({ item, people, onAssign }: {
-  item: ReceiptItem;
-  people: Person[];
-  onAssign: (itemId: number, personIdx: number | -1) => void;
-}) {
-  const isUnassigned = item.assignedTo === null;
-
-  return (
-    <View style={[styles.assignCard, SHADOWS.card, isUnassigned && styles.assignCardUnassigned]}>
-      <View style={styles.assignCardTop}>
-        <Text style={styles.assignCardName} numberOfLines={2}>{item.name}</Text>
-        <Text style={styles.assignCardPrice}>{fmt(item.price)}</Text>
-      </View>
-      <Text style={styles.assignCardHint}>Tap to assign →</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.assignBtnsRow}>
-        {/* Per-person buttons */}
-        {people.map((p, i) => {
-          const isActive = item.assignedTo === i;
-          return (
-            <TouchableOpacity
-              key={i}
-              style={[
-                styles.assignPersonBtn,
-                { borderColor: p.color },
-                isActive && { backgroundColor: p.color },
-              ]}
-              onPress={() => onAssign(item.id, i)}
-            >
-              <Text style={[styles.assignPersonBtnText, isActive && { color: '#fff' }]}>
-                {p.emoji} {p.name}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-        {/* Shared button */}
-        <TouchableOpacity
-          style={[
-            styles.assignPersonBtn,
-            { borderColor: '#607D8B' },
-            item.assignedTo === -1 && { backgroundColor: '#607D8B' },
-          ]}
-          onPress={() => onAssign(item.id, -1)}
-        >
-          <Text style={[styles.assignPersonBtnText, item.assignedTo === -1 && { color: '#fff' }]}>
-            ½ Split
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </View>
-  );
-}
-
 // ── Step 4: Summary ───────────────────────────────────────────────
 
 function SummaryStep({ people, summary, receiptItems, onBack, onReset }: {
   people: Person[];
-  summary: { totals: number[]; grandTotal: number; totalDiscounts: number };
+  summary: { totals: number[]; grandTotal: number; totalDiscounts: number; subtotal: number };
   receiptItems: ReceiptItem[];
-  onBack: () => void;
-  onReset: () => void;
+  onBack: () => void; onReset: () => void;
 }) {
-  const { totals, grandTotal, totalDiscounts } = summary;
-  const preTaxTotal = receiptItems.filter(i => !i.isDiscount).reduce((s, i) => s + i.price, 0);
+  const { totals, grandTotal, totalDiscounts, subtotal } = summary;
 
   return (
-    <ScrollView style={styles.stepContent} contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text style={styles.summaryHero}>💸 Here's who owes what</Text>
+    <ScrollView style={styles.stepContent} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+      <Text style={styles.summaryTitle}>💸 Here's who owes what</Text>
 
-      {/* Per-person cards */}
-      {people.map((p, i) => (
-        <View key={i} style={[styles.summaryPersonCard, { borderLeftColor: p.color }]}>
-          <View style={styles.summaryPersonHeader}>
-            <Text style={styles.summaryPersonEmoji}>{p.emoji}</Text>
-            <Text style={styles.summaryPersonName}>{p.name}</Text>
-            <Text style={[styles.summaryPersonTotal, { color: p.color }]}>
-              {fmt(totals[i])}
-            </Text>
-          </View>
+      {people.map((p, i) => {
+        const myItems   = receiptItems.filter(item => !item.isDiscount && item.assignedTo === i);
+        const halfItems = receiptItems.filter(item => !item.isDiscount && item.assignedTo === -1);
+        const myDiscount = totalDiscounts > 0 && grandTotal > 0
+          ? totalDiscounts * (totals[i] / (grandTotal + totalDiscounts * (totals[i] / (grandTotal || 1))))
+          : 0;
 
-          {/* Their items */}
-          {receiptItems
-            .filter(item => !item.isDiscount && item.assignedTo === i)
-            .map(item => (
-              <View key={item.id} style={styles.summaryItemRow}>
-                <Text style={styles.summaryItemName} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.summaryItemPrice}>{fmt(item.price)}</Text>
-              </View>
-            ))}
-
-          {/* Shared items (their portion) */}
-          {receiptItems
-            .filter(item => !item.isDiscount && item.assignedTo === -1)
-            .map(item => (
-              <View key={item.id} style={styles.summaryItemRow}>
-                <Text style={[styles.summaryItemName, { color: COLORS.muted }]} numberOfLines={1}>
-                  ½ {item.name}
-                </Text>
-                <Text style={[styles.summaryItemPrice, { color: COLORS.muted }]}>
-                  {fmt(item.price / people.length)}
-                </Text>
-              </View>
-            ))}
-
-          {/* Discount saving */}
-          {totalDiscounts > 0 && (
-            <View style={styles.summaryItemRow}>
-              <Text style={[styles.summaryItemName, { color: COLORS.green }]}>🏷️ Discounts applied</Text>
-              <Text style={[styles.summaryItemPrice, { color: COLORS.green }]}>
-                -{fmt(totalDiscounts * (totals[i] / (grandTotal + totalDiscounts > 0 ? grandTotal + totalDiscounts : 1)))}
-              </Text>
+        return (
+          <View key={i} style={[styles.summaryCard, { borderLeftColor: p.color }]}>
+            <View style={styles.summaryCardHeader}>
+              <Text style={styles.summaryCardEmoji}>{p.emoji}</Text>
+              <Text style={styles.summaryCardName}>{p.name}</Text>
+              <Text style={[styles.summaryCardTotal, { color: p.color }]}>{fmt(totals[i])}</Text>
             </View>
-          )}
-        </View>
-      ))}
 
-      {/* Grand total */}
-      <View style={styles.grandTotalCard}>
-        <View style={styles.grandTotalRow}>
-          <Text style={styles.grandTotalLabel}>Subtotal</Text>
-          <Text style={styles.grandTotalValue}>{fmt(preTaxTotal)}</Text>
+            {myItems.map(item => (
+              <View key={item.id} style={styles.summaryLine}>
+                <Text style={styles.summaryLineName} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.summaryLinePrice}>{fmt(item.price)}</Text>
+              </View>
+            ))}
+
+            {halfItems.map(item => (
+              <View key={item.id} style={styles.summaryLine}>
+                <Text style={[styles.summaryLineName, { color: COLORS.muted }]} numberOfLines={1}>½ {item.name}</Text>
+                <Text style={[styles.summaryLinePrice, { color: COLORS.muted }]}>{fmt(item.price / people.length)}</Text>
+              </View>
+            ))}
+
+            {totalDiscounts > 0 && (
+              <View style={styles.summaryLine}>
+                <Text style={[styles.summaryLineName, { color: COLORS.green }]}>🏷️ Discount applied</Text>
+                <Text style={[styles.summaryLinePrice, { color: COLORS.green }]}>-{fmt(myDiscount)}</Text>
+              </View>
+            )}
+          </View>
+        );
+      })}
+
+      {/* Grand total dark card */}
+      <View style={styles.grandCard}>
+        <View style={styles.grandRow}>
+          <Text style={styles.grandLabel}>Subtotal</Text>
+          <Text style={styles.grandValue}>{fmt(subtotal)}</Text>
         </View>
         {totalDiscounts > 0 && (
-          <View style={styles.grandTotalRow}>
-            <Text style={[styles.grandTotalLabel, { color: COLORS.green }]}>🏷️ Total discounts</Text>
-            <Text style={[styles.grandTotalValue, { color: COLORS.green }]}>-{fmt(totalDiscounts)}</Text>
+          <View style={styles.grandRow}>
+            <Text style={[styles.grandLabel, { color: '#6EE7B7' }]}>🏷️ Total discounts</Text>
+            <Text style={[styles.grandValue, { color: '#6EE7B7' }]}>-{fmt(totalDiscounts)}</Text>
           </View>
         )}
-        <View style={[styles.grandTotalRow, styles.grandTotalFinal]}>
-          <Text style={styles.grandTotalFinalLabel}>Total paid</Text>
-          <Text style={styles.grandTotalFinalValue}>{fmt(grandTotal)}</Text>
+        <View style={[styles.grandRow, styles.grandFinal]}>
+          <Text style={styles.grandFinalLabel}>Total paid</Text>
+          <Text style={styles.grandFinalValue}>{fmt(grandTotal)}</Text>
         </View>
       </View>
 
-      {/* Actions */}
       <TouchableOpacity style={styles.btnBack} onPress={onBack}>
         <Text style={styles.btnBackText}>← Edit assignments</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.btnPrimary, { marginTop: 12 }]} onPress={onReset}>
+      <TouchableOpacity style={[styles.btnPrimary, { marginTop: 10 }]} onPress={onReset}>
         <Text style={styles.btnPrimaryText}>🔄 Start new receipt</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
+// ── Helpers ───────────────────────────────────────────────────────
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 // ── Styles ────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  headerBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8,
-  },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: COLORS.text },
-  resetBtn: { fontSize: 14, fontWeight: '700', color: COLORS.red },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+  headerTitle: { fontSize: 22, fontWeight: FONTS.bold, color: COLORS.text },
+  resetText: { fontSize: 14, fontWeight: FONTS.semibold, color: COLORS.red },
 
-  // Step indicator
-  stepIndicator: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 24, paddingVertical: 12,
-  },
-  stepDot: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: COLORS.border,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  stepDotActive: { backgroundColor: COLORS.primary + '25' },
-  stepDotText: { fontSize: 16 },
-  stepLine: { flex: 1, height: 2, backgroundColor: COLORS.border, marginHorizontal: 4 },
+  // Step bar
+  stepBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12 },
+  stepItem: { alignItems: 'center', gap: 4 },
+  stepCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.divider, alignItems: 'center', justifyContent: 'center' },
+  stepCircleActive: { backgroundColor: COLORS.primary + '22' },
+  stepLabel: { fontSize: 10, fontWeight: FONTS.semibold, color: COLORS.muted },
+  stepLabelActive: { color: COLORS.primary },
+  stepLine: { flex: 1, height: 2, backgroundColor: COLORS.border, marginHorizontal: 4, marginBottom: 16 },
   stepLineActive: { backgroundColor: COLORS.primary },
 
-  // Step 1: Capture
-  scanningView: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  receiptPreview: { width: '100%', height: 220, borderRadius: 16 },
-  scanningTitle: { fontSize: 18, fontWeight: '800', color: COLORS.text, marginTop: 16 },
-  scanningSubtitle: { fontSize: 14, fontWeight: '600', color: COLORS.muted, marginTop: 4 },
-  captureContainer: { padding: 24, alignItems: 'center' },
-  captureIcon: { fontSize: 64, marginBottom: 12 },
-  captureTitle: { fontSize: 22, fontWeight: '800', color: COLORS.text, marginBottom: 8 },
-  captureSubtitle: { fontSize: 14, fontWeight: '600', color: COLORS.muted, textAlign: 'center', lineHeight: 22, marginBottom: 28 },
-  captureBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 16,
-    backgroundColor: '#FFF3E0', borderRadius: 16, padding: 18,
-    width: '100%', marginBottom: 12,
-  },
-  captureBtnIcon: { fontSize: 36 },
-  captureBtnTitle: { fontSize: 16, fontWeight: '800', color: COLORS.primary },
-  captureBtnSub: { fontSize: 13, fontWeight: '600', color: COLORS.muted, marginTop: 2 },
-  manualBtn: { paddingVertical: 14, alignItems: 'center' },
-  manualBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.muted },
-  aiNote: {
-    backgroundColor: '#F8F4FF', borderRadius: 12, padding: 12,
-    marginTop: 8, width: '100%',
-  },
-  aiNoteText: { fontSize: 11, fontWeight: '600', color: '#7C3AED', textAlign: 'center' },
+  // Scan view
+  scanView: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  scanThumb: { width: '100%', height: 180, borderRadius: 16, marginBottom: 8 },
+  scanStatusText: { fontSize: 16, fontWeight: FONTS.bold, color: COLORS.text, marginTop: 16, marginBottom: 20 },
+  pipeline: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pipelineLine: { width: 28, height: 2, backgroundColor: COLORS.border },
+  pipelineCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.divider, alignItems: 'center', justifyContent: 'center' },
+  pipelineLabel: { fontSize: 11, fontWeight: FONTS.semibold, color: COLORS.muted, marginTop: 4 },
+  freeLabel: { fontSize: 12, fontWeight: FONTS.medium, color: COLORS.muted, marginTop: 16 },
 
-  // Step 2: People
+  // Capture step
+  captureScroll: { padding: 20, alignItems: 'center' },
+  captureHeroIcon: { fontSize: 64, marginBottom: 12 },
+  captureHeroTitle: { fontSize: 24, fontWeight: FONTS.black, color: COLORS.text, marginBottom: 8 },
+  captureHeroSub: { fontSize: 14, fontWeight: FONTS.medium, color: COLORS.muted, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  captureCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: COLORS.card, borderRadius: 16, padding: 18, width: '100%', ...SHADOWS.card },
+  captureCardIcon: { width: 56, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  captureCardTitle: { fontSize: 16, fontWeight: FONTS.bold, color: COLORS.text, marginBottom: 2 },
+  captureCardSub: { fontSize: 13, fontWeight: FONTS.medium, color: COLORS.muted },
+  captureCardArrow: { fontSize: 20, fontWeight: FONTS.bold, color: COLORS.primary },
+  manualLink: { paddingVertical: 16 },
+  manualLinkText: { fontSize: 14, fontWeight: FONTS.semibold, color: COLORS.muted },
+  tipsCard: { backgroundColor: COLORS.card, borderRadius: 16, padding: 16, width: '100%', marginBottom: 12, ...SHADOWS.card },
+  tipsTitle: { fontSize: 14, fontWeight: FONTS.bold, color: COLORS.text, marginBottom: 10 },
+  tipRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
+  tipDot: { fontSize: 14, color: COLORS.primary, fontWeight: FONTS.bold },
+  tipText: { fontSize: 13, fontWeight: FONTS.medium, color: COLORS.muted, flex: 1, lineHeight: 20 },
+  keysCard: { backgroundColor: '#F0FDF4', borderRadius: 16, padding: 16, width: '100%', borderWidth: 1, borderColor: '#BBF7D0' },
+  keysTitle: { fontSize: 14, fontWeight: FONTS.bold, color: '#166534', marginBottom: 10 },
+  keyRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  keyName: { fontSize: 13, fontWeight: FONTS.bold, color: '#15803D' },
+  keyUrl: { fontSize: 12, fontWeight: FONTS.medium, color: '#166534' },
+  keysNote: { fontSize: 12, fontWeight: FONTS.medium, color: '#15803D', marginTop: 6 },
+
+  // People step
   stepContent: { flex: 1, paddingHorizontal: 16 },
-  sectionTitle: { fontSize: 17, fontWeight: '800', color: COLORS.text, marginTop: 16, marginBottom: 4 },
-  sectionSub: { fontSize: 13, fontWeight: '600', color: COLORS.muted, marginBottom: 12 },
-  peopleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  personChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 10,
-    borderRadius: 20, borderWidth: 2,
-  },
-  personChipEmoji: { fontSize: 18 },
-  personChipName: { fontSize: 14, fontWeight: '800' },
-  addPersonChip: {
-    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20,
-    borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.primary,
-    alignItems: 'center',
-  },
-  addPersonText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
-  hintText: { fontSize: 11, fontWeight: '600', color: COLORS.muted, marginTop: 6 },
+  sectionTitle: { fontSize: 16, fontWeight: FONTS.bold, color: COLORS.text, marginTop: 20, marginBottom: 4 },
+  sectionHint: { fontSize: 12, fontWeight: FONTS.medium, color: COLORS.muted, marginBottom: 12 },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, marginBottom: 4 },
+  addPersonRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  addPersonInput: { flex: 1, backgroundColor: COLORS.card, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, fontWeight: FONTS.medium, color: COLORS.text, borderWidth: 1.5, borderColor: COLORS.border },
+  addPersonBtn: { backgroundColor: COLORS.primary, borderRadius: 12, paddingHorizontal: 18, justifyContent: 'center' },
+  addPersonBtnText: { color: '#fff', fontWeight: FONTS.bold, fontSize: 14 },
+  peopleWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  personPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 2 },
+  personEmoji: { fontSize: 16 },
+  personName: { fontSize: 14, fontWeight: FONTS.bold },
+  personRemove: { fontSize: 12, fontWeight: FONTS.bold, marginLeft: 2 },
+  validationHint: { fontSize: 13, fontWeight: FONTS.semibold, color: COLORS.amber, marginBottom: 8 },
+  divider: { height: 1, backgroundColor: COLORS.border, marginVertical: 16 },
+  discountBadge: { backgroundColor: '#F0FDF4', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#BBF7D0' },
+  discountBadgeText: { fontSize: 11, fontWeight: FONTS.bold, color: '#166534' },
+  reviewItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.card, borderRadius: 12, padding: 12, marginBottom: 6, gap: 10, ...SHADOWS.card },
+  reviewItemDiscount: { backgroundColor: '#F0FDF8', borderWidth: 1, borderColor: '#6EE7B7' },
+  reviewItemName: { fontSize: 14, fontWeight: FONTS.semibold, color: COLORS.text },
+  reviewDiscountLabel: { fontSize: 11, fontWeight: FONTS.bold, color: COLORS.green, marginTop: 2 },
+  reviewItemPrice: { fontSize: 15, fontWeight: FONTS.bold, color: COLORS.primary },
+  reviewRemove: { fontSize: 15, color: COLORS.muted, fontWeight: FONTS.bold, padding: 4 },
+  emptyItems: { backgroundColor: COLORS.card, borderRadius: 14, padding: 28, alignItems: 'center', ...SHADOWS.card },
+  emptyItemsText: { fontSize: 15, fontWeight: FONTS.bold, color: COLORS.text },
+  emptyItemsSub: { fontSize: 13, fontWeight: FONTS.medium, color: COLORS.muted, marginTop: 4 },
 
-  reviewItem: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORS.card, borderRadius: 12,
-    padding: 12, marginBottom: 6, gap: 10, ...SHADOWS.card,
-  },
-  reviewItemDiscount: { backgroundColor: '#F0FDF8', borderWidth: 1, borderColor: COLORS.green + '40' },
-  reviewItemName: { fontSize: 14, fontWeight: '700', color: COLORS.text },
-  discountLabel: { fontSize: 11, fontWeight: '700', color: COLORS.green, marginTop: 2 },
-  reviewItemPrice: { fontSize: 15, fontWeight: '800', color: COLORS.primary },
-  removeItemBtn: { fontSize: 16, color: COLORS.muted, fontWeight: '700', padding: 4 },
-  emptyItems: {
-    backgroundColor: COLORS.card, borderRadius: 12, padding: 20,
-    alignItems: 'center', marginBottom: 8,
-  },
-  emptyItemsText: { fontSize: 14, fontWeight: '600', color: COLORS.muted },
-
-  // Step 3: Assign
-  quickAssignBar: {
-    backgroundColor: COLORS.card, paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
-  },
-  quickAssignLabel: { fontSize: 12, fontWeight: '700', color: COLORS.muted, marginBottom: 8 },
-  quickChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16 },
-  quickChipText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  assignProgressBar: { paddingVertical: 12 },
-  assignProgressText: { fontSize: 13, fontWeight: '700', color: COLORS.muted, marginBottom: 6 },
-  progressTrack: { height: 6, backgroundColor: COLORS.border, borderRadius: 3 },
+  // Assign step
+  quickBar: { backgroundColor: COLORS.card, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  quickBarLabel: { fontSize: 11, fontWeight: FONTS.bold, color: COLORS.muted, marginBottom: 8 },
+  quickChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  quickChipText: { color: '#fff', fontWeight: FONTS.bold, fontSize: 13 },
+  progressWrap: { paddingVertical: 14 },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  progressText: { fontSize: 13, fontWeight: FONTS.semibold, color: COLORS.muted },
+  progressDone: { fontSize: 13, fontWeight: FONTS.bold, color: COLORS.green },
+  progressTrack: { height: 6, backgroundColor: COLORS.border, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: 6, backgroundColor: COLORS.primary, borderRadius: 3 },
-  assignCard: {
-    backgroundColor: COLORS.card, borderRadius: 16, padding: 14,
-    marginBottom: 10, marginTop: 2,
-  },
-  assignCardUnassigned: { borderWidth: 2, borderColor: '#FFB74D', borderStyle: 'dashed' },
-  assignCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
-  assignCardName: { fontSize: 15, fontWeight: '800', color: COLORS.text, flex: 1, marginRight: 8 },
-  assignCardPrice: { fontSize: 16, fontWeight: '800', color: COLORS.primary },
-  assignCardHint: { fontSize: 11, fontWeight: '600', color: COLORS.muted, marginBottom: 10 },
-  assignBtnsRow: { gap: 8, paddingBottom: 2 },
-  assignPersonBtn: {
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, borderWidth: 2,
-  },
-  assignPersonBtnText: { fontSize: 13, fontWeight: '800', color: COLORS.text },
-  discountSection: {
-    backgroundColor: '#F0FDF8', borderRadius: 14, padding: 14, marginTop: 8,
-    borderWidth: 1, borderColor: COLORS.green + '40',
-  },
-  discountSectionTitle: { fontSize: 14, fontWeight: '800', color: '#1a7a5e', marginBottom: 4 },
-  discountSectionSub: { fontSize: 12, fontWeight: '600', color: COLORS.muted, marginBottom: 10 },
-  discountRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  discountRowName: { fontSize: 13, fontWeight: '600', color: COLORS.text, flex: 1 },
-  discountRowPrice: { fontSize: 13, fontWeight: '800', color: COLORS.green },
-  assignFooter: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: COLORS.card, padding: 16,
-    borderTopWidth: 1, borderTopColor: COLORS.border,
-  },
-  unassignedWarning: { fontSize: 13, fontWeight: '700', color: '#E65100', textAlign: 'center', marginBottom: 8 },
-  assignFooterBtns: { flexDirection: 'row', gap: 10 },
-  btnBack: {
-    borderWidth: 2, borderColor: COLORS.border, borderRadius: 12,
-    paddingVertical: 13, paddingHorizontal: 16, alignItems: 'center',
-  },
-  btnBackText: { color: COLORS.text, fontWeight: '700', fontSize: 14 },
+  assignCard: { backgroundColor: COLORS.card, borderRadius: 16, padding: 14, marginBottom: 10 },
+  assignCardUnassigned: { borderWidth: 2, borderColor: '#FCD34D', borderStyle: 'dashed' },
+  assignCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  assignCardName: { fontSize: 15, fontWeight: FONTS.bold, color: COLORS.text, flex: 1 },
+  assignedLabel: { fontSize: 12, fontWeight: FONTS.semibold, marginTop: 2 },
+  tapToAssign: { fontSize: 12, fontWeight: FONTS.medium, color: COLORS.muted, marginTop: 2 },
+  assignCardPrice: { fontSize: 15, fontWeight: FONTS.bold, color: COLORS.primary },
+  expandIcon: { fontSize: 12, color: COLORS.muted, fontWeight: FONTS.bold },
+  assignButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  assignBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 2, borderColor: COLORS.border },
+  assignBtnEmoji: { fontSize: 14 },
+  assignBtnName: { fontSize: 13, fontWeight: FONTS.bold, color: COLORS.text },
+  assignBtnCheck: { fontSize: 12, color: '#fff', marginLeft: 2 },
+  discountBox: { backgroundColor: '#F0FDF8', borderRadius: 14, padding: 14, marginTop: 8, borderWidth: 1, borderColor: '#6EE7B7' },
+  discountBoxTitle: { fontSize: 14, fontWeight: FONTS.bold, color: '#166534', marginBottom: 4 },
+  discountBoxSub: { fontSize: 12, fontWeight: FONTS.medium, color: '#15803D', marginBottom: 10 },
+  discountBoxRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderTopWidth: 1, borderTopColor: '#BBF7D0' },
+  discountBoxName: { fontSize: 13, fontWeight: FONTS.medium, color: COLORS.text, flex: 1 },
+  discountBoxPrice: { fontSize: 13, fontWeight: FONTS.bold, color: COLORS.green },
+  assignFooter: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: COLORS.card, padding: 16, borderTopWidth: 1, borderTopColor: COLORS.border },
+  unassignedWarn: { fontSize: 13, fontWeight: FONTS.semibold, color: '#D97706', textAlign: 'center', marginBottom: 8 },
+  footerBtns: { flexDirection: 'row', gap: 10 },
 
-  // Step 4: Summary
-  summaryHero: { fontSize: 20, fontWeight: '800', color: COLORS.text, marginTop: 16, marginBottom: 16, textAlign: 'center' },
-  summaryPersonCard: {
-    backgroundColor: COLORS.card, borderRadius: 16, padding: 16,
-    marginBottom: 12, borderLeftWidth: 4, ...SHADOWS.card,
-  },
-  summaryPersonHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
-  summaryPersonEmoji: { fontSize: 24 },
-  summaryPersonName: { fontSize: 16, fontWeight: '800', color: COLORS.text, flex: 1 },
-  summaryPersonTotal: { fontSize: 22, fontWeight: '800' },
-  summaryItemRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingVertical: 4, borderTopWidth: 1, borderTopColor: COLORS.border,
-  },
-  summaryItemName: { fontSize: 13, fontWeight: '600', color: COLORS.text, flex: 1, marginRight: 8 },
-  summaryItemPrice: { fontSize: 13, fontWeight: '700', color: COLORS.text },
-  grandTotalCard: {
-    backgroundColor: '#1E1B4B', borderRadius: 16, padding: 18,
-    marginBottom: 16, gap: 8,
-  },
-  grandTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  grandTotalLabel: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
-  grandTotalValue: { fontSize: 15, fontWeight: '800', color: '#fff' },
-  grandTotalFinal: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 10, marginTop: 4 },
-  grandTotalFinalLabel: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  grandTotalFinalValue: { fontSize: 22, fontWeight: '800', color: '#fff' },
+  // Summary
+  summaryTitle: { fontSize: 20, fontWeight: FONTS.black, color: COLORS.text, textAlign: 'center', marginTop: 16, marginBottom: 16 },
+  summaryCard: { backgroundColor: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 12, borderLeftWidth: 4, ...SHADOWS.card },
+  summaryCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  summaryCardEmoji: { fontSize: 24 },
+  summaryCardName: { fontSize: 16, fontWeight: FONTS.bold, color: COLORS.text, flex: 1 },
+  summaryCardTotal: { fontSize: 22, fontWeight: FONTS.black },
+  summaryLine: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderTopWidth: 1, borderTopColor: COLORS.border },
+  summaryLineName: { fontSize: 13, fontWeight: FONTS.medium, color: COLORS.text, flex: 1, marginRight: 8 },
+  summaryLinePrice: { fontSize: 13, fontWeight: FONTS.semibold, color: COLORS.text },
+  grandCard: { backgroundColor: '#1E1B4B', borderRadius: 16, padding: 18, marginBottom: 16, gap: 8 },
+  grandRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  grandLabel: { fontSize: 14, fontWeight: FONTS.medium, color: 'rgba(255,255,255,0.65)' },
+  grandValue: { fontSize: 15, fontWeight: FONTS.bold, color: '#fff' },
+  grandFinal: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 10, marginTop: 4 },
+  grandFinalLabel: { fontSize: 16, fontWeight: FONTS.semibold, color: '#fff' },
+  grandFinalValue: { fontSize: 24, fontWeight: FONTS.black, color: '#fff' },
 
   // Shared
-  btnPrimary: { backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  btnPrimaryText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  btnOutline: { borderWidth: 2, borderColor: COLORS.primary, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  btnOutlineText: { color: COLORS.primary, fontWeight: '700', fontSize: 14 },
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-  modalSheet: {
-    backgroundColor: COLORS.card, borderTopLeftRadius: 24,
-    borderTopRightRadius: 24, padding: 24, paddingBottom: 40,
-  },
+  btnPrimary: { backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 15, alignItems: 'center' },
+  btnPrimaryText: { color: '#fff', fontWeight: FONTS.bold, fontSize: 15 },
+  btnOutline: { borderWidth: 2, borderColor: COLORS.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
+  btnOutlineText: { color: COLORS.primary, fontWeight: FONTS.semibold, fontSize: 14 },
+  btnBack: { borderWidth: 2, borderColor: COLORS.border, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 16, alignItems: 'center' },
+  btnBackText: { color: COLORS.text, fontWeight: FONTS.semibold, fontSize: 14 },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+  modalSheet: { backgroundColor: COLORS.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
   modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, alignSelf: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: 20, fontWeight: '800', color: COLORS.text, marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '700', color: COLORS.textLight, marginBottom: 6, marginTop: 8 },
-  input: {
-    backgroundColor: COLORS.background, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 15, fontWeight: '600', color: COLORS.text,
-    borderWidth: 1, borderColor: COLORS.border, marginBottom: 4,
-  },
+  modalTitle: { fontSize: 20, fontWeight: FONTS.bold, color: COLORS.text, marginBottom: 16 },
+  inputLabel: { fontSize: 12, fontWeight: FONTS.bold, color: COLORS.textSecondary, marginBottom: 6, marginTop: 8 },
+  input: { backgroundColor: COLORS.background, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15, fontWeight: FONTS.medium, color: COLORS.text, borderWidth: 1.5, borderColor: COLORS.border, marginBottom: 4 },
 });

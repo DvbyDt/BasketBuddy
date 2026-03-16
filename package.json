@@ -5,6 +5,8 @@
   "scripts": {
     "start": "node app.js"
   },
-  "dependencies": {},
+  "dependencies": {
+    "expo-barcode-scanner": "^13.0.1"
+  },
   "description": "Backend for BasketBuddy project"
 }

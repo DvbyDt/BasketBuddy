@@ -1,3 +1,17 @@
+
+<p align="center">
+  <img src="https://img.shields.io/github/workflow/status/DvbyDt/BasketBuddy/Deploy%20Web%20App?label=Web%20Build&logo=github&style=for-the-badge" alt="Web Build"/>
+  <img src="https://img.shields.io/badge/Expo-SDK%2054-1B1F23?logo=expo&logoColor=white&style=for-the-badge" alt="Expo SDK"/>
+  <img src="https://img.shields.io/badge/React%20Native-0.81.5-61DAFB?logo=react&logoColor=white&style=for-the-badge" alt="React Native"/>
+  <img src="https://img.shields.io/badge/Firebase-Cloud%20Sync-FFCA28?logo=firebase&logoColor=white&style=for-the-badge" alt="Firebase"/>
+  <img src="https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white&style=for-the-badge" alt="Python"/>
+  <img src="https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white&style=for-the-badge" alt="Node.js"/>
+  <img src="https://img.shields.io/badge/PWA-Installable-5A0FC8?logo=pwa&logoColor=white&style=for-the-badge" alt="PWA"/>
+  <img src="https://img.shields.io/badge/Android-APK%20Ready-3DDC84?logo=android&logoColor=white&style=for-the-badge" alt="Android"/>
+  <img src="https://img.shields.io/badge/AI-Groq%20%26%20Anthropic-8B5CF6?logo=openai&logoColor=white&style=for-the-badge" alt="AI"/>
+  <img src="https://img.shields.io/github/license/DvbyDt/BasketBuddy?style=for-the-badge" alt="License"/>
+</p>
+
 # BasketBuddy
 
 BasketBuddy is a full-stack grocery price comparison platform for Dublin shoppers. It tracks prices of grocery items across Tesco, Lidl, Aldi, Asian Supermarket, and Super Value. Available as a progressive web app and a native Android app, with real-time cloud sync for custom items and baskets.
@@ -123,10 +137,10 @@ Each item shows a **5-week bar chart** with one bar per week per store, color-co
                            │  Firebase Firestore  │
                            │  (basketbuddy-e6676) │
                            │                      │
-                           │  ┌────────────────┐  │
-                           │  │ customItems     │  │
-                           │  │ sharedBasket    │  │
-                           │  └────────────────┘  │
+                          │  ┌──────────────────────────────┐  │
+                          │  │ users/{uid}/customItems/*     │  │
+                          │  │ users/{uid}/basket/*          │  │
+                          │  └──────────────────────────────┘  │
                            │                      │
                            │  Firebase Auth        │
                            │  (Anonymous)          │
@@ -366,6 +380,52 @@ If you are upgrading from an older Expo SDK:
 - Edit your opening screen component (e.g., Home.tsx) to improve logo display.
 ```
 
+### Local testing (Mobile + AI backend)
+
+Receipt scanning and AI tips are powered by Firebase Cloud Functions (so the app does not ask users for API keys).
+
+#### Run Functions locally (emulator)
+
+```bash
+# From repo root
+cd functions
+npm install
+
+# Set required env vars for the emulator process
+export OCR_SPACE_API_KEY="..."
+export GROQ_API_KEY="..."
+
+# Start the emulator (functions only)
+firebase emulators:start --only functions --project basketbuddy-e6676
+```
+
+The default Functions emulator base URL is:
+- `http://localhost:5001/basketbuddy-e6676/us-central1`
+
+#### Point the mobile app to the correct base URL
+
+Mobile reads `expo.extra.functionsBaseUrl` from `mobile/app.json`.
+
+- **iOS Simulator**: `http://localhost:5001/basketbuddy-e6676/us-central1` works.
+- **Android Emulator**: use `http://10.0.2.2:5001/basketbuddy-e6676/us-central1` (Android maps `10.0.2.2` → your host `localhost`).
+- **Real phone (Expo Go)**: use your laptop’s LAN IP, e.g. `http://192.168.1.50:5001/basketbuddy-e6676/us-central1`
+
+Update this field in `mobile/app.json` depending on the device you’re testing:
+
+- `expo.extra.functionsBaseUrl`
+
+#### Run the mobile app
+
+```bash
+cd mobile
+npx expo start
+```
+
+Then:
+- Press `i` for iOS simulator (Mac)
+- Press `a` for Android emulator
+- Or scan the QR code in Expo Go on your phone (ensure phone + laptop are on the same Wi‑Fi)
+
 ### Build Android APK
 
 ```bash
@@ -460,11 +520,11 @@ BasketBuddy uses Firebase for **real-time data synchronization** between all use
 | **Project** | `basketbuddy-e6676` |
 | **Database** | Cloud Firestore (NoSQL, document-based) |
 | **Auth** | Firebase Auth with Anonymous sign-in |
-| **Collections** | `customItems`, `sharedBasket` |
+| **Collections** | `users/{uid}/customItems/*`, `users/{uid}/basket/*` |
 
 ### Firestore Collections
 
-#### `customItems` — User-Added Grocery Items
+#### `users/{uid}/customItems/*` — User-Added Grocery Items
 
 ```javascript
 {
@@ -479,7 +539,7 @@ BasketBuddy uses Firebase for **real-time data synchronization** between all use
 }
 ```
 
-#### `sharedBasket` — Shared Shopping Basket
+#### `users/{uid}/basket/*` — User Basket (per-user)
 
 ```javascript
 {
@@ -521,6 +581,28 @@ User A adds "Oat Milk"          User B sees it instantly
 npx firebase-tools deploy --only firestore:rules --project basketbuddy-e6676
 ```
 
+### AI (Receipt scanning + tips) — Server-side proxy (no user API keys)
+
+BasketBuddy no longer asks users for Groq/OCR keys. AI calls are proxied through Firebase Cloud Functions:
+
+- `aiScanReceipt`: OCR.space → Groq → structured receipt items
+- `aiGroqComplete`: Groq text completion for tips/insights
+
+**Functions setup**
+
+```bash
+cd functions
+npm install
+npm run build
+```
+
+**Required environment variables (Functions)**
+
+- `OCR_SPACE_API_KEY`
+- `GROQ_API_KEY`
+
+When running locally, use the Functions emulator and set env vars in your shell before starting it.
+
 ---
 
 ## 🔐 Security
@@ -550,31 +632,31 @@ npx firebase-tools deploy --only firestore:rules --project basketbuddy-e6676
 
 | Collection | Read | Create | Update | Delete |
 |-----------|------|--------|--------|--------|
-| `customItems` | ✅ Auth required | ✅ Auth + `createdBy == uid` | ✅ Auth + `createdBy == uid` | ✅ Auth + `createdBy == uid` |
-| `sharedBasket` | ✅ Auth required | ✅ Auth required | ✅ Auth required | ✅ Auth required |
+| `users/{uid}/customItems/*` | ✅ Auth required (own uid) | ✅ Auth + `createdBy == uid` | ✅ Auth + `createdBy == uid` | ✅ Auth + `createdBy == uid` |
+| `users/{uid}/basket/*` | ✅ Auth required (own uid) | ✅ Auth + `addedBy == uid` | ✅ Auth + `addedBy == uid` | ✅ Auth + `addedBy == uid` |
 | Everything else | ❌ Denied | ❌ Denied | ❌ Denied | ❌ Denied |
 
-### Current `firestore.rules`
+### Current `firestore.rules` (simplified)
 
 ```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /customItems/{itemId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
-                    && request.resource.data.createdBy == request.auth.uid;
-      allow update: if request.auth != null
-                    && resource.data.createdBy == request.auth.uid;
-      allow delete: if request.auth != null
-                    && resource.data.createdBy == request.auth.uid;
+    match /users/{uid} {
+      match /customItems/{itemId} {
+        allow read, list: if request.auth != null && request.auth.uid == uid;
+        allow create, update, delete: if request.auth != null
+          && request.auth.uid == uid
+          && request.resource.data.createdBy == request.auth.uid;
+      }
+      match /basket/{basketItemId} {
+        allow read, list: if request.auth != null && request.auth.uid == uid;
+        allow create, update, delete: if request.auth != null
+          && request.auth.uid == uid
+          && request.resource.data.addedBy == request.auth.uid;
+      }
     }
-    match /sharedBasket/{itemId} {
-      allow read, write: if request.auth != null;
-    }
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    match /{document=**} { allow read, write: if false; }
   }
 }
 ```

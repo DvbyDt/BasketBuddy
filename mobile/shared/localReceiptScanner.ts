@@ -13,7 +13,7 @@
 const GROQ_API_KEY: string = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? '';
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const VISION_MODEL = 'llama-3.2-11b-vision-preview';
+const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
 export interface ScannedItem {
   name: string;

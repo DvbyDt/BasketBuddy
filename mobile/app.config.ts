@@ -16,5 +16,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     firebaseAppId:             process.env.FIREBASE_APP_ID             ?? '1:134089448283:web:606976ef00f6ac003e187e',
     // Cloud Functions base URL — override with EXPO_PUBLIC_FUNCTIONS_BASE_URL for local emulator
     functionsBaseUrl: process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ?? 'https://us-central1-basketbuddy-e6676.cloudfunctions.net',
+    // Groq key for on-device receipt scanning (localReceiptScanner.ts)
+    groqApiKey: process.env.EXPO_PUBLIC_GROQ_API_KEY ?? '',
   },
 });

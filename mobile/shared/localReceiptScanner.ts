@@ -15,7 +15,8 @@ const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
 export interface ScannedItem {
   name: string;
-  price: number;
+  price: number;       // total line price (unit price × quantity)
+  quantity: number;    // number of units (default 1)
   isDiscount: boolean;
 }
 
@@ -86,7 +87,7 @@ export async function scanReceiptLocal(
           role: 'system',
           content:
             'You are a receipt parser. Output ONLY a raw JSON object — no markdown, no explanation, no text before or after. ' +
-            'Format: {"items":[{"name":"string","price":number,"isDiscount":boolean}]}',
+            'Format: {"items":[{"name":"string","price":number,"quantity":number,"isDiscount":boolean}]}',
         },
         {
           role: 'user',
@@ -100,11 +101,12 @@ export async function scanReceiptLocal(
               text:
                 'Read this receipt and extract every line item.\n\n' +
                 'Rules:\n' +
-                '- Each purchased product → isDiscount: false, price as positive number\n' +
-                '- Discount/saving/clubcard/offer lines → isDiscount: true, price as positive number\n' +
+                '- Each purchased product → isDiscount: false, price = TOTAL line price, quantity = number of units bought\n' +
+                '- Discount/saving/clubcard/offer lines → isDiscount: true, price as positive number, quantity: 1\n' +
                 '- EXCLUDE: store name, address, date/time, subtotal, TOTAL, VAT, cash tendered, card payment, receipt number, loyalty points, thank you\n' +
                 '- Fix OCR noise: "1.S9"→1.59, "€2,99"→2.99, "Ml1k"→"Milk"\n' +
-                '- Short clean names: "Whole Milk 2L" not "WHL MLK 2LTR IRSH"\n\n' +
+                '- Short clean names: "Whole Milk 2L" not "WHL MLK 2LTR IRSH"\n' +
+                '- If quantity is not shown, default to 1\n\n' +
                 'Return ONLY the JSON object, nothing else.',
             },
           ],
@@ -137,6 +139,7 @@ export async function scanReceiptLocal(
     .map((it: any) => ({
       name:       String(it.name ?? '').trim(),
       price:      Math.abs(Number(it.price) || 0),
+      quantity:   Math.max(1, Math.round(Number(it.quantity) || 1)),
       isDiscount: Boolean(it.isDiscount),
     }))
     .filter((it: ScannedItem) => it.name.length > 0 && it.price > 0);

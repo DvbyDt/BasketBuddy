@@ -31,7 +31,8 @@ import { scanReceiptLocal } from '../../shared/localReceiptScanner';
 interface ReceiptItem {
   id: number;
   name: string;
-  price: number;
+  price: number;       // total line price (already × quantity)
+  quantity: number;    // units on this line
   isDiscount: boolean;
   assignedTo: number | null; // person index | -1 = shared equally | null = unassigned
 }
@@ -61,6 +62,7 @@ async function scanReceiptWithOCR(
     id:         i + 1,
     name:       item.name,
     price:      item.price,
+    quantity:   item.quantity,
     isDiscount: item.isDiscount,
     assignedTo: null,
   }));
@@ -190,6 +192,7 @@ export default function SplitScreen() {
     setReceiptItems(prev => [...prev, {
       id: nextId, name,
       price: Math.abs(price),
+      quantity: 1,
       isDiscount: price < 0,
       assignedTo: null,
     }]);

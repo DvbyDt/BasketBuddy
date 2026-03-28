@@ -9,10 +9,8 @@
 //
 // Requires EXPO_PUBLIC_GROQ_API_KEY in mobile/.env
 
-import Constants from 'expo-constants';
-
-const GROQ_API_KEY: string =
-  (Constants.expoConfig?.extra as any)?.groqApiKey ?? '';
+// Expo SDK 50+ inlines EXPO_PUBLIC_* vars from mobile/.env at bundle time
+const GROQ_API_KEY: string = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? '';
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const VISION_MODEL = 'llama-3.2-11b-vision-preview';

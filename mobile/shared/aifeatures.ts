@@ -2,32 +2,15 @@
 // All AI-powered features using only Groq (100% free).
 // Every function here costs €0.00 per call.
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Item, BasketItem } from './types';
-
-const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL    = 'llama-3.3-70b-versatile';
+import { aiGroqComplete } from './backend';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ── Core Groq caller ─────────────────────────────────────────────
 
 async function callGroq(prompt: string, maxTokens = 300): Promise<string> {
-  const stored = await AsyncStorage.getItem('basketbuddy_ai');
-  const settings = stored ? JSON.parse(stored) : {};
-  const key = settings.groqKey || settings.key;
-  if (!key) throw new Error('NO_KEY');
-
-  const resp = await fetch(GROQ_API, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: maxTokens,
-      temperature: 0.7,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
-  const data = await resp.json();
-  return data.choices?.[0]?.message?.content ?? '';
+  const resp = await aiGroqComplete(prompt, maxTokens);
+  return resp.content ?? '';
 }
 
 // ── 1. Smart Basket Tips ─────────────────────────────────────────

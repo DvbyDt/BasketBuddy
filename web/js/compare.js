@@ -84,7 +84,7 @@ function renderBestDeals() {
     const savA = Math.max(...pricesA) - Math.min(...pricesA);
     const savB = Math.max(...pricesB) - Math.min(...pricesB);
     return savB - savA;
-  }).slice(0, 5);
+  }).slice(0, 10);
 
   document.getElementById('bestDeals').innerHTML = sorted.map(item => {
     const { store, price } = getCheapestStore(item);

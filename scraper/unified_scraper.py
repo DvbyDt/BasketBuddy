@@ -41,32 +41,57 @@ HEADERS = {
 }
 
 TESCO_CATS = [
-    ("shop/fresh-food/fresh-fruit/all",           "Fruits"),
-    ("shop/fresh-food/fresh-vegetables/all",      "Vegetables"),
-    ("shop/fresh-food/dairy-eggs-chilled/all",    "Dairy"),
-    ("shop/bakery/all",                           "Bakery"),
-    ("shop/food-cupboard/pasta-rice-noodles/all", "Grains"),
-    ("shop/food-cupboard/cereals/all",            "Cereals"),
-    ("shop/frozen-food/frozen-vegetables/all",    "Frozen"),
-    ("shop/world-foods/all",                      "World Foods"),
+    ("shop/fresh-food/fresh-fruit/all",                   "Fruits"),
+    ("shop/fresh-food/fresh-vegetables/all",              "Vegetables"),
+    ("shop/fresh-food/dairy-eggs-chilled/all",            "Dairy"),
+    ("shop/fresh-food/fresh-meat-poultry/all",            "Meat"),
+    ("shop/fresh-food/fish-seafood/all",                  "Fish"),
+    ("shop/bakery/all",                                   "Bakery"),
+    ("shop/food-cupboard/pasta-rice-noodles/all",         "Grains"),
+    ("shop/food-cupboard/cereals/all",                    "Cereals"),
+    ("shop/food-cupboard/tinned-food/all",                "Tinned"),
+    ("shop/food-cupboard/condiments-dressings-sauces/all","Condiments"),
+    ("shop/drinks/soft-drinks/all",                       "Drinks"),
+    ("shop/drinks/juices-smoothies/all",                  "Juice"),
+    ("shop/frozen-food/frozen-vegetables/all",            "Frozen"),
+    ("shop/frozen-food/frozen-meat-poultry/all",          "Frozen Meat"),
+    ("shop/snacks-sweets/snacks/all",                     "Snacks"),
+    ("shop/world-foods/all",                              "World Foods"),
 ]
 LIDL_CATS = [
     ("c/fresh-fruit-vegetables/c1000", "Fruits & Vegetables"),
     ("c/dairy-eggs-chilled/c1004",     "Dairy"),
     ("c/bakery-cakes/c1002",           "Bakery"),
+    ("c/meat-poultry/c1003",           "Meat"),
+    ("c/fish-seafood/c1005",           "Fish"),
+    ("c/frozen-food/c1006",            "Frozen"),
     ("c/food-cupboard/c1007",          "Food Cupboard"),
+    ("c/drinks/c1008",                 "Drinks"),
+    ("c/snacks-confectionery/c1009",   "Snacks"),
 ]
 ALDI_CATS = [
-    ("en/groceries/fresh-produce",  "Fresh Produce"),
-    ("en/groceries/dairy-eggs",     "Dairy"),
-    ("en/groceries/bakery",         "Bakery"),
-    ("en/groceries/food-cupboard",  "Food Cupboard"),
+    ("en/groceries/fresh-produce",    "Fresh Produce"),
+    ("en/groceries/dairy-eggs",       "Dairy"),
+    ("en/groceries/meat-poultry",     "Meat"),
+    ("en/groceries/fish-seafood",     "Fish"),
+    ("en/groceries/bakery",           "Bakery"),
+    ("en/groceries/food-cupboard",    "Food Cupboard"),
+    ("en/groceries/frozen",           "Frozen"),
+    ("en/groceries/drinks",           "Drinks"),
+    ("en/groceries/snacks",           "Snacks"),
 ]
 SUPERVALU_CATS = [
-    ("fruit-veg/fresh-fruit",      "Fruits"),
-    ("fruit-veg/fresh-vegetables", "Vegetables"),
-    ("dairy-eggs-chilled",         "Dairy"),
-    ("bakery",                     "Bakery"),
+    ("fruit-veg/fresh-fruit",         "Fruits"),
+    ("fruit-veg/fresh-vegetables",    "Vegetables"),
+    ("dairy-eggs-chilled",            "Dairy"),
+    ("meat-poultry",                  "Meat"),
+    ("fish-seafood",                  "Fish"),
+    ("bakery",                        "Bakery"),
+    ("food-cupboard/cereals",         "Cereals"),
+    ("food-cupboard/pasta-rice",      "Grains"),
+    ("drinks/soft-drinks",            "Drinks"),
+    ("frozen",                        "Frozen"),
+    ("snacks-confectionery",          "Snacks"),
 ]
 
 
@@ -273,9 +298,60 @@ def merge(existing, scraped):
 
 # ── Main ──────────────────────────────────────────────────────────
 
+def generate_web_data_js(items, output_path):
+    """Generate web/js/data.js from the merged data.json items list."""
+    import os
+    stores_js = """  { id: 'tesco',      name: 'Tesco',             color: '#EE1C25', emoji: '🔴' },
+  { id: 'lidl',       name: 'Lidl',              color: '#0050AA', emoji: '🔵' },
+  { id: 'aldi',       name: 'Aldi',              color: '#FF6600', emoji: '🟠' },
+  { id: 'asian',      name: 'Asian Supermarket', color: '#9B5DE5', emoji: '🟣' },
+  { id: 'supervalue', name: 'Super Value',       color: '#06D6A0', emoji: '🟢' },"""
+
+    def fmt_item(it):
+        p_str = ', '.join(f"{k}: {v}" for k, v in it['prices'].items())
+        h_parts = []
+        for k, v in it.get('history', {}).items():
+            h_parts.append(f"{k}: [{','.join(str(x) for x in v)}]")
+        h_str = ', '.join(h_parts)
+        n = it['name'].replace("'", "\\'")
+        q = str(it.get('quantity', '')).replace("'", "\\'")
+        cat = it.get('category', 'Other')
+        return (
+            f"  {{\n"
+            f"    id: {it['id']}, name: '{n}', quantity: '{q}', category: '{cat}',\n"
+            f"    prices:  {{ {p_str} }},\n"
+            f"    history: {{ {h_str} }}\n"
+            f"  }}"
+        )
+
+    js_items = ',\n'.join(fmt_item(it) for it in items)
+    next_id = max((i['id'] for i in items), default=0) + 1
+
+    content = f"""// ─── js/data.js ──────────────────────────────────────────────────
+// Central data store. Auto-generated by unified_scraper.py — do not hand-edit.
+
+const stores = [
+{stores_js}
+];
+
+let items = [
+{js_items},
+];
+
+let basket = [];
+let splitItems = [];
+let customStoreCount = 0;
+let nextId = {next_id};
+"""
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+    print(f"  Wrote {len(items)} items -> {output_path}")
+
+
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--limit",   type=int, default=50)
+    p.add_argument("--limit",   type=int, default=0, help="items per store (0 = unlimited)")
     p.add_argument("--store",   default=None)
     p.add_argument("--data",    default="../mobile/shared/data.json")
     p.add_argument("--dry-run", action="store_true")
@@ -375,6 +451,12 @@ def main():
     with open(dp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     print(f"\nSaved -> {dp}")
+
+    # Also regenerate web/js/data.js so web and mobile stay in sync
+    web_js_path = str(dp.parent.parent / "web" / "js" / "data.js")
+    print(f"\nGenerating web data.js...")
+    generate_web_data_js(merged, web_js_path)
+
     print(f"Done! {datetime.now().strftime('%H:%M:%S')}")
 
 

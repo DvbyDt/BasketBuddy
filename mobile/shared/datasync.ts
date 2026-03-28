@@ -23,6 +23,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { items as bundledItems, stores as bundledStores } from './store';
 import type { Item, Store } from './types';
+import { notifyItemsChanged } from './store';
+import { applyLiveOffers } from './offers';
 
 // ── Config ────────────────────────────────────────────────────────
 // Change REPO_OWNER/REPO_NAME/BRANCH to match your GitHub repo.
@@ -54,6 +56,7 @@ interface LiveData {
 
 let _syncDone    = false;
 let _lastFetchAt = 0;
+let _syncPromise: Promise<{ source: 'cache' | 'network' | 'bundle'; itemCount: number }> | null = null;
 
 // ── Cache helpers ─────────────────────────────────────────────────
 
@@ -90,6 +93,8 @@ function applyLiveData(liveData: LiveData): void {
 
   // Update stores (less likely to change but keep in sync)
   stores.splice(0, stores.length, ...liveData.stores);
+
+  notifyItemsChanged();
 }
 
 // We import mutable arrays from store.ts
@@ -111,39 +116,41 @@ export async function initDataSync(): Promise<{
   source: 'cache' | 'network' | 'bundle';
   itemCount: number;
 }> {
-  if (_syncDone) {
-    return { source: 'cache', itemCount: items.length };
-  }
+  if (_syncPromise) return _syncPromise;
 
-  // ── 1. Try reading from AsyncStorage cache ───────────────────
-  const cached = await readCache<LiveData>(CACHE_KEY_DATA);
-  if (cached) {
-    console.log(`[DataSync] Using cached data (${cached.items.length} items)`);
-    applyLiveData(cached);
-    _syncDone = true;
+  _syncPromise = (async () => {
+    // ── 1. Try reading from AsyncStorage cache ───────────────────────
+    const cached = await readCache<LiveData>(CACHE_KEY_DATA);
+    if (cached) {
+      console.log(`[DataSync] Using cached data (${cached.items.length} items)`);
+      applyLiveData(cached);
+      _syncDone = true;
 
-    // Fetch fresh in background (don't await — don't block startup)
-    fetchAndCacheInBackground();
-    return { source: 'cache', itemCount: cached.items.length };
-  }
+      // Fetch fresh in background (don't await — don't block startup)
+      fetchAndCacheInBackground();
+      return { source: 'cache' as const, itemCount: cached.items.length };
+    }
 
-  // ── 2. Try fetching from GitHub ──────────────────────────────
-  try {
-    const liveData = await fetchFromGitHub();
-    applyLiveData(liveData);
-    await writeCache(CACHE_KEY_DATA, liveData);
-    _syncDone    = true;
-    _lastFetchAt = Date.now();
-    console.log(`[DataSync] Fetched live data (${liveData.items.length} items)`);
-    return { source: 'network', itemCount: liveData.items.length };
+    // ── 2. Try fetching from GitHub ──────────────────────────────────
+    try {
+      const liveData = await fetchFromGitHub();
+      applyLiveData(liveData);
+      await writeCache(CACHE_KEY_DATA, liveData);
+      _syncDone    = true;
+      _lastFetchAt = Date.now();
+      console.log(`[DataSync] Fetched live data (${liveData.items.length} items)`);
+      fetchOffersFromGitHub(); // non-blocking
+      return { source: 'network' as const, itemCount: liveData.items.length };
 
-  } catch (err) {
-    // ── 3. Fall back to bundled data ─────────────────────────
-    console.warn('[DataSync] GitHub fetch failed, using bundled data:', err);
-    _syncDone = true;
-    // bundled data is already loaded via store.ts imports
-    return { source: 'bundle', itemCount: items.length };
-  }
+    } catch (err) {
+      // ── 3. Fall back to bundled data ─────────────────────────
+      console.warn('[DataSync] GitHub fetch failed, using bundled data:', err);
+      _syncDone = true;
+      // bundled data is already loaded via store.ts imports
+      return { source: 'bundle' as const, itemCount: items.length };
+    }
+  })();
+  return _syncPromise;
 }
 
 async function fetchFromGitHub(): Promise<LiveData> {
@@ -161,6 +168,27 @@ async function fetchFromGitHub(): Promise<LiveData> {
       throw new Error('Invalid data.json format');
     }
     return json;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchOffersFromGitHub(): Promise<void> {
+  const controller = new AbortController();
+  const timeout    = setTimeout(() => controller.abort(), 8000);
+  try {
+    const resp = await fetch(OFFERS_URL, {
+      signal: controller.signal,
+      headers: { 'Cache-Control': 'no-cache' },
+    });
+    if (!resp.ok) return;
+    const json = await resp.json();
+    if (json && Array.isArray(json.offers)) {
+      applyLiveOffers(json);
+      await writeCache(CACHE_KEY_OFFERS, json);
+    }
+  } catch {
+    // Offers fetch failure is non-fatal — bundled offers.json is the fallback
   } finally {
     clearTimeout(timeout);
   }

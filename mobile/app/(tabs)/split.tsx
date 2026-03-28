@@ -49,15 +49,14 @@ const PERSON_COLORS = ['#3A86FF', '#2D6A4F', '#9B5DE5', '#FF6B35', '#FF9800', '#
 
 // ── OCR + Parse pipeline ─────────────────────────────────────────
 //
-// On-device OCR via react-native-mlkit-ocr (free, no API key, works offline)
-// + Groq Llama 3.3 called directly from the app (free).
-// No Cloud Functions required.
+// Groq Vision reads the image and parses items in a single API call.
+// Works in Expo Go — no native modules, no Cloud Functions.
 
 async function scanReceiptWithOCR(
-  imageUri: string,
+  imageBase64: string,
   onStatus: (msg: string, step: number) => void
 ): Promise<ReceiptItem[]> {
-  const scanned = await scanReceiptLocal(imageUri, onStatus);
+  const scanned = await scanReceiptLocal(imageBase64, onStatus);
   return scanned.map((item, i) => ({
     id:         i + 1,
     name:       item.name,
@@ -93,33 +92,35 @@ export default function SplitScreen() {
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
-      quality: 0.9,
+      quality: 0.8,
+      base64: true,
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
     });
     if (!result.canceled && result.assets[0]) {
       setImageUri(result.assets[0].uri);
-      await doScan(result.assets[0].uri);
+      await doScan(result.assets[0].base64 ?? '');
     }
   };
 
   const pickGallery = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      quality: 0.9,
+      quality: 0.8,
+      base64: true,
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
     });
     if (!result.canceled && result.assets[0]) {
       setImageUri(result.assets[0].uri);
-      await doScan(result.assets[0].uri);
+      await doScan(result.assets[0].base64 ?? '');
     }
   };
 
-  const doScan = async (uri: string) => {
+  const doScan = async (base64: string) => {
     setScanning(true);
     setScanStep(1);
     setScanStatus('Reading receipt…');
 
     try {
-      const items = await scanReceiptWithOCR(uri, (msg, step) => {
+      const items = await scanReceiptWithOCR(base64, (msg, step) => {
         setScanStatus(msg);
         setScanStep(step);
       });

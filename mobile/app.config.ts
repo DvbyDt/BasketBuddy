@@ -14,5 +14,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     firebaseStorageBucket:     process.env.FIREBASE_STORAGE_BUCKET     ?? 'basketbuddy-e6676.firebasestorage.app',
     firebaseMessagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID ?? '134089448283',
     firebaseAppId:             process.env.FIREBASE_APP_ID             ?? '1:134089448283:web:606976ef00f6ac003e187e',
+    // Cloud Functions base URL — override with EXPO_PUBLIC_FUNCTIONS_BASE_URL for local emulator
+    functionsBaseUrl: process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ?? 'https://us-central1-basketbuddy-e6676.cloudfunctions.net',
   },
 });

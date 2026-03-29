@@ -15,6 +15,23 @@ let _customItemsLoaded = false;
 let _unsubscribe: (() => void) | null = null;
 let _onCustomItemsChange: ((items: Item[]) => void) | null = null;
 
+// ── Reactive items listener system ───────────────────────────────
+// datasync.ts calls notifyItemsChanged() after it mutates the items
+// array so screens can re-render without polling.
+type ItemsListener = () => void;
+const _itemsListeners = new Set<ItemsListener>();
+
+/** Subscribe to items array changes. Returns an unsubscribe function. */
+export function subscribeItems(cb: ItemsListener): () => void {
+  _itemsListeners.add(cb);
+  return () => _itemsListeners.delete(cb);
+}
+
+/** Called by datasync after mutating the items/stores arrays in-place. */
+export function notifyItemsChanged(): void {
+  _itemsListeners.forEach(cb => cb());
+}
+
 /** Register a callback to be notified when cloud custom items change */
 export function onCustomItemsUpdate(cb: (customItems: Item[]) => void) {
   _onCustomItemsChange = cb;

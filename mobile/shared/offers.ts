@@ -28,6 +28,19 @@ let _offersData: Offer[]    = [];
 let _updatedAt: string|null = null;
 let _loaded                 = false;
 
+// ── Apply live data (called by datasync after GitHub fetch) ───────
+
+export interface LiveOffersData {
+  updatedAt: string;
+  offers: Offer[];
+}
+
+export function applyLiveOffers(data: LiveOffersData): void {
+  _offersData = data.offers ?? [];
+  _updatedAt  = data.updatedAt ?? null;
+  _loaded     = true;
+}
+
 // ── Load ──────────────────────────────────────────────────────────
 
 /**

@@ -22,16 +22,18 @@ import {
   ActivityIndicator, Image, Animated,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SHADOWS, RADIUS, FONTS, SPACING } from '../../shared/theme';
 import { fmt } from '../../shared/store';
+import { scanReceiptLocal } from '../../shared/localReceiptScanner';
 
 // ── Types ─────────────────────────────────────────────────────────
 
 interface ReceiptItem {
   id: number;
   name: string;
-  price: number;
+  price: number;      // total line price (unitPrice × quantity)
+  unitPrice: number;  // price per single unit
+  quantity: number;   // units on this line
   isDiscount: boolean;
   assignedTo: number | null; // person index | -1 = shared equally | null = unassigned
 }
@@ -49,113 +51,23 @@ const PERSON_COLORS = ['#3A86FF', '#2D6A4F', '#9B5DE5', '#FF6B35', '#FF9800', '#
 
 // ── OCR + Parse pipeline ─────────────────────────────────────────
 //
-// Step 1: OCR.space reads the image → raw text
-// Step 2: Groq parses raw text → structured items JSON
-//
-// Both are free. OCR.space: 25,000 pages/month free.
-// Groq: unlimited free tier on Llama 3.3.
+// Groq Vision reads the image and parses items in a single API call.
+// Works in Expo Go — no native modules, no Cloud Functions.
 
 async function scanReceiptWithOCR(
-  imageUri: string,
-  imageBase64: string
+  imageBase64: string,
+  onStatus: (msg: string, step: number) => void
 ): Promise<ReceiptItem[]> {
-
-  // Load keys from AsyncStorage (set in Settings screen)
-  const stored  = await AsyncStorage.getItem('basketbuddy_ai');
-  const settings = stored ? JSON.parse(stored) : {};
-
-  const ocrKey  = settings.ocrKey;
-  const groqKey = settings.groqKey || settings.key;
-
-  if (!ocrKey) throw new Error('NO_OCR_KEY');
-  if (!groqKey) throw new Error('NO_GROQ_KEY');
-
-  // ── Step 1: OCR.space ─────────────────────────────────────────
-  // Sends image as base64, returns extracted text.
-  // Free API key from: ocr.space/ocrapi/freekey
-
-  const ocrForm = new FormData();
-  ocrForm.append('base64Image', `data:image/jpeg;base64,${imageBase64}`);
-  ocrForm.append('language', 'eng');
-  ocrForm.append('isOverlayRequired', 'false');
-  ocrForm.append('detectOrientation', 'true');
-  ocrForm.append('scale', 'true');
-  ocrForm.append('OCREngine', '2'); // Engine 2 = better accuracy for receipts
-
-  const ocrResp = await fetch('https://api.ocr.space/parse/image', {
-    method: 'POST',
-    headers: { apikey: ocrKey },
-    body: ocrForm,
-  });
-
-  const ocrData = await ocrResp.json();
-
-  if (!ocrData?.ParsedResults?.[0]?.ParsedText) {
-    throw new Error('OCR could not read this image. Try better lighting or a clearer photo.');
-  }
-
-  const rawText = ocrData.ParsedResults[0].ParsedText as string;
-  console.log('[OCR] Raw text:', rawText.slice(0, 200));
-
-  if (rawText.trim().length < 10) {
-    throw new Error('Receipt text too short to parse. Is the photo clear and well-lit?');
-  }
-
-  // ── Step 2: Groq parses the OCR text ──────────────────────────
-  // Groq understands the messy OCR output and returns clean JSON.
-  // Free API key from: console.groq.com
-
-  const prompt = `You are parsing raw OCR text extracted from a grocery receipt photo.
-Your job is to identify every purchased item and return clean structured JSON.
-
-RAW OCR TEXT FROM RECEIPT:
-${rawText}
-
-RULES:
-- Regular purchased items → isDiscount: false, price as positive number
-- Discount/saving/offer/clubcard lines → isDiscount: true, price as positive number (we handle the sign)
-- SKIP these lines entirely: store name, address, date, time, subtotal, total, VAT, cash, card payment, receipt number, loyalty points, thank you messages
-- Fix obvious OCR errors: "1.S9" → 1.59, "€2,99" → 2.99, "MI1k" → "Milk"
-- If a price is completely unreadable, skip that item
-- Keep item names concise but clear (e.g. "Whole Milk 2L" not "WHL MLK 2LTR IRSH")
-
-Return ONLY this exact JSON format, no markdown, no explanation:
-{"items":[{"name":"Whole Milk 2L","price":1.59,"isDiscount":false},{"name":"Clubcard Saving","price":0.30,"isDiscount":true}]}`;
-
-  const groqResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${groqKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 1500,
-      temperature: 0.1, // low temperature = more consistent parsing
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
-
-  const groqData = await groqResp.json();
-  const text     = groqData.choices?.[0]?.message?.content ?? '';
-  const clean    = text.replace(/```json|```/g, '').trim();
-
-  let parsed: { items: { name: string; price: number; isDiscount: boolean }[] };
-  try {
-    parsed = JSON.parse(clean);
-  } catch {
-    throw new Error('Could not parse receipt items. The receipt may be too blurry or at an angle.');
-  }
-
-  return (parsed.items ?? [])
-    .map((item, i) => ({
-      id:         i + 1,
-      name:       String(item.name ?? 'Unknown item').trim(),
-      price:      Math.abs(parseFloat(String(item.price)) || 0),
-      isDiscount: Boolean(item.isDiscount),
-      assignedTo: null,
-    }))
-    .filter(item => item.price > 0 && item.name.length > 0);
+  const scanned = await scanReceiptLocal(imageBase64, onStatus);
+  return scanned.map((item, i) => ({
+    id:         i + 1,
+    name:       item.name,
+    price:      item.price,
+    unitPrice:  item.unitPrice,
+    quantity:   item.quantity,
+    isDiscount: item.isDiscount,
+    assignedTo: null,
+  }));
 }
 
 // ── Main Screen ───────────────────────────────────────────────────
@@ -184,42 +96,38 @@ export default function SplitScreen() {
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
-      quality: 0.9,
+      quality: 0.8,
       base64: true,
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
     });
     if (!result.canceled && result.assets[0]) {
       setImageUri(result.assets[0].uri);
-      await doScan(result.assets[0].uri, result.assets[0].base64 ?? '');
+      await doScan(result.assets[0].base64 ?? '');
     }
   };
 
   const pickGallery = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      quality: 0.9,
+      quality: 0.8,
       base64: true,
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
     });
     if (!result.canceled && result.assets[0]) {
       setImageUri(result.assets[0].uri);
-      await doScan(result.assets[0].uri, result.assets[0].base64 ?? '');
+      await doScan(result.assets[0].base64 ?? '');
     }
   };
 
-  const doScan = async (uri: string, base64: string) => {
+  const doScan = async (base64: string) => {
     setScanning(true);
     setScanStep(1);
     setScanStatus('Reading receipt…');
 
     try {
-      setScanStep(1);
-      setScanStatus('📷 Sending to OCR.space…');
-      await delay(300);
-
-      setScanStep(2);
-      setScanStatus('🤖 Groq is parsing items…');
-
-      const items = await scanReceiptWithOCR(uri, base64);
+      const items = await scanReceiptWithOCR(base64, (msg, step) => {
+        setScanStatus(msg);
+        setScanStep(step);
+      });
 
       setScanStep(3);
       setScanStatus(`✅ Found ${items.length} items!`);
@@ -232,31 +140,11 @@ export default function SplitScreen() {
     } catch (e: any) {
       const msg = e.message ?? 'Unknown error';
 
-      if (msg === 'NO_OCR_KEY') {
-        Alert.alert(
-          'OCR.space key needed 🔑',
-          'Go to Settings and add your free OCR.space API key.\n\nGet one free at: ocr.space/ocrapi/freekey\n\nTakes 60 seconds, no credit card.',
-          [
-            { text: 'Add manually instead', onPress: () => { setReceiptItems([]); setStep('people'); } },
-            { text: 'OK' },
-          ]
-        );
-      } else if (msg === 'NO_GROQ_KEY') {
-        Alert.alert(
-          'Groq key needed 🔑',
-          'Go to Settings and add your free Groq API key.\n\nGet one free at: console.groq.com',
-          [
-            { text: 'Add manually instead', onPress: () => { setReceiptItems([]); setStep('people'); } },
-            { text: 'OK' },
-          ]
-        );
-      } else {
-        Alert.alert(
-          'Scan failed',
-          msg,
-          [{ text: 'Add items manually', onPress: () => { setReceiptItems([]); setStep('people'); } }]
-        );
-      }
+      Alert.alert(
+        'Scan failed',
+        msg,
+        [{ text: 'Add items manually', onPress: () => { setReceiptItems([]); setStep('people'); } }]
+      );
     } finally {
       setScanning(false);
       setScanStep(0);
@@ -305,7 +193,9 @@ export default function SplitScreen() {
     }
     setReceiptItems(prev => [...prev, {
       id: nextId, name,
-      price: Math.abs(price),
+      price:     Math.abs(price),
+      unitPrice: Math.abs(price),
+      quantity:  1,
       isDiscount: price < 0,
       assignedTo: null,
     }]);
@@ -607,16 +497,10 @@ function CaptureStep({ scanning, scanStatus, scanStep, imageUri, onCamera, onGal
 
       {/* Keys needed */}
       <View style={styles.keysCard}>
-        <Text style={styles.keysTitle}>🔑 Keys needed (both free)</Text>
-        <View style={styles.keyRow}>
-          <Text style={styles.keyName}>OCR.space</Text>
-          <Text style={styles.keyUrl}>ocr.space/ocrapi/freekey</Text>
-        </View>
-        <View style={styles.keyRow}>
-          <Text style={styles.keyName}>Groq</Text>
-          <Text style={styles.keyUrl}>console.groq.com</Text>
-        </View>
-        <Text style={styles.keysNote}>Add both in Settings → AI Provider</Text>
+        <Text style={styles.keysTitle}>🔒 Privacy</Text>
+        <Text style={styles.keysNote}>
+          Your receipt image is processed to extract items. We don’t ask you for API keys.
+        </Text>
       </View>
     </ScrollView>
   );

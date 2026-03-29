@@ -3,6 +3,14 @@
 // Groq runs Llama 3.3 for free at console.groq.com — no credit card.
 // Settings are saved to localStorage so they persist across sessions.
 
+// ✅ Production hardening:
+// AI calls are proxied via Firebase Cloud Functions so users are never asked for API keys.
+// Configure this if you deploy Functions to a region/project:
+//   window.BASKETBUDDY_FUNCTIONS_BASE_URL = "https://<region>-<project>.cloudfunctions.net";
+const FUNCTIONS_BASE_URL =
+  window.BASKETBUDDY_FUNCTIONS_BASE_URL ||
+  'http://localhost:5001/basketbuddy-e6676/us-central1';
+
 const AI_PROVIDERS = {
   groq: {
     name: 'Groq',
@@ -59,18 +67,8 @@ function loadAISettings() {
 }
 
 function saveAISettings() {
-  const providerEl = document.getElementById('aiProvider');
-  const keyEl = document.getElementById('aiApiKey');
-  if (!providerEl || !keyEl) return;
-  const provider = providerEl.value;
-  const key      = keyEl.value.trim();
-  if (provider !== 'none' && !key) {
-    showToast('Enter your API key first!');
-    return;
-  }
-  localStorage.setItem('basketbuddy_ai', JSON.stringify({ provider, key }));
   updateAIStatusPill();
-  showToast('✅ AI settings saved!');
+  showToast('✅ AI is enabled automatically');
 }
 
 function loadAISettingsIntoForm() {
@@ -85,36 +83,23 @@ function loadAISettingsIntoForm() {
 function onAIProviderChange() {
   const providerEl = document.getElementById('aiProvider');
   if (!providerEl) return;
-  const provider = providerEl.value;
   const keyRow   = document.getElementById('aiKeyRow');
   const keyLabel = document.getElementById('aiKeyLabel');
   const keyHelp  = document.getElementById('aiKeyHelp');
   const keyInput = document.getElementById('aiApiKey');
 
-  if (provider === 'none') {
-    if (keyRow) keyRow.style.display = 'none';
-    if (keyHelp) keyHelp.innerHTML = '⚠️ AI features disabled. Receipt scanning and basket optimizer will use demo mode.';
-  } else {
-    if (keyRow) keyRow.style.display = 'block';
-    const p = AI_PROVIDERS[provider];
-    if (keyLabel) keyLabel.textContent = p.keyLabel;
-    if (keyInput) keyInput.placeholder = p.keyPlaceholder;
-    if (keyHelp) keyHelp.innerHTML = p.helpText;
-  }
+  // AI is always enabled via backend proxy. No user API keys.
+  if (keyRow) keyRow.style.display = 'none';
+  if (keyLabel) keyLabel.textContent = 'AI (managed by BasketBuddy)';
+  if (keyInput) keyInput.value = '';
+  if (keyHelp) keyHelp.innerHTML = '✅ AI is enabled automatically. You don’t need to paste any API keys.';
 }
 
 function updateAIStatusPill() {
   const pill = document.getElementById('aiStatusPill');
   if (!pill) return;
-  const s = loadAISettings();
-  if (s.provider && s.provider !== 'none' && s.key) {
-    const name = AI_PROVIDERS[s.provider]?.name || s.provider;
-    pill.textContent = `⚡ ${name}`;
-    pill.style.background = 'rgba(6,214,160,0.3)';
-  } else {
-    pill.textContent = '⚙️ Set up AI';
-    pill.style.background = 'rgba(255,255,255,0.2)';
-  }
+  pill.textContent = '⚡ AI enabled';
+  pill.style.background = 'rgba(6,214,160,0.3)';
 }
 
 function showAISettings() {
@@ -129,26 +114,23 @@ function showAISettings() {
 // ── Core AI call ──────────────────────────────────────────────────
 
 async function callAI(systemPrompt, userPrompt, maxTokens = 800) {
-  const s = loadAISettings();
-  if (!s.provider || s.provider === 'none' || !s.key) {
-    throw new Error('NO_AI_KEY');
-  }
-  const p = AI_PROVIDERS[s.provider];
-  if (!p) throw new Error('Unknown provider');
+  // Route all text-only prompts through your backend.
+  const prompt = `${systemPrompt}\n\n${userPrompt}`;
+  await ensureWebAuth();
+  const token = await fbAuth.currentUser.getIdToken();
 
-  const response = await fetch(p.url, {
+  const response = await fetch(`${FUNCTIONS_BASE_URL}/aiGroqComplete`, {
     method: 'POST',
-    headers: p.buildHeaders(s.key),
-    body: p.buildBody(systemPrompt, userPrompt, maxTokens)
+    headers: {
+      'content-type': 'application/json',
+      'authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ prompt, maxTokens }),
   });
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  return p.extractText(data);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
+  return data.content || '';
 }
 
 // ── AI: Receipt scanning ──────────────────────────────────────────
@@ -156,36 +138,21 @@ async function callAI(systemPrompt, userPrompt, maxTokens = 800) {
 // Groq doesn't support image input, so we use Anthropic for this one feature.
 
 async function callAnthropicVision(base64Image, mediaType) {
-  const s = loadAISettings();
-
-  // If user has Anthropic key, use it
-  if (s.provider === 'anthropic' && s.key) {
-    const p = AI_PROVIDERS.anthropic;
-    const response = await fetch(p.url, {
-      method: 'POST',
-      headers: p.buildHeaders(s.key),
-      body: JSON.stringify({
-        model: p.model,
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
-            { type: 'text', text: 'Extract all grocery items and their prices from this receipt. Return ONLY a JSON array like: [{"name":"Item name","price":1.99}]. No preamble, no markdown.' }
-          ]
-        }]
-      })
-    });
-    const data = await response.json();
-    return p.extractText(data);
-  }
-
-  // If Groq, use text-only mode with a note that vision isn't supported
-  if (s.provider === 'groq' && s.key) {
-    throw new Error('GROQ_NO_VISION');
-  }
-
-  throw new Error('NO_AI_KEY');
+  // Web currently supports receipt scanning via the backend OCR+Groq pipeline.
+  // Keep this function for backward compatibility with older UI flows.
+  await ensureWebAuth();
+  const token = await fbAuth.currentUser.getIdToken();
+  const response = await fetch(`${FUNCTIONS_BASE_URL}/aiScanReceipt`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ imageBase64: base64Image }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
+  return JSON.stringify((data.items || []).map(i => ({ name: i.name, price: i.price })));
 }
 
 // ── AI: Basket optimiser ──────────────────────────────────────────

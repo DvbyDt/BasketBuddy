@@ -1,16 +1,18 @@
 // ─── Firebase configuration for BasketBuddy ─────────────────────
+import Constants from 'expo-constants';
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 
+const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
+
 const firebaseConfig = {
-  apiKey: 'AIzaSyBiT18T3LF9iopQsMdmeBN0BmGrHCCrxOU',
-  authDomain: 'basketbuddy-e6676.firebaseapp.com',
-  projectId: 'basketbuddy-e6676',
-  storageBucket: 'basketbuddy-e6676.firebasestorage.app',
-  messagingSenderId: '134089448283',
-  appId: '1:134089448283:web:606976ef00f6ac003e187e',
-  measurementId: 'G-H7JVZEKM9M',
+  apiKey:            extra.firebaseApiKey            ?? 'AIzaSyBiT18T3LF9iopQsMdmeBN0BmGrHCCrxOU',
+  authDomain:        extra.firebaseAuthDomain        ?? 'basketbuddy-e6676.firebaseapp.com',
+  projectId:         extra.firebaseProjectId         ?? 'basketbuddy-e6676',
+  storageBucket:     extra.firebaseStorageBucket     ?? 'basketbuddy-e6676.firebasestorage.app',
+  messagingSenderId: extra.firebaseMessagingSenderId ?? '134089448283',
+  appId:             extra.firebaseAppId             ?? '1:134089448283:web:606976ef00f6ac003e187e',
 };
 
 const app = initializeApp(firebaseConfig);
@@ -44,4 +46,11 @@ export async function ensureAuth(): Promise<string> {
 /** Get current user UID (or null if not yet authed) */
 export function getCurrentUid(): string | null {
   return _currentUser?.uid ?? null;
+}
+
+/** Get a fresh Firebase ID token for calling your backend */
+export async function getIdToken(): Promise<string> {
+  await ensureAuth();
+  if (!_currentUser) throw new Error('AUTH_NOT_READY');
+  return await _currentUser.getIdToken(/* forceRefresh */ false);
 }

@@ -18,8 +18,11 @@ function addToBasket(itemId) {
 }
 
 function removeFromBasket(itemId) {
+  const existing = basket.find(b => b.itemId === itemId);
   basket = basket.filter(b => b.itemId !== itemId);
-  if (typeof removeBasketItemFromCloud === 'function') removeBasketItemFromCloud(itemId);
+  if (existing && typeof removeBasketItemFromCloud === 'function') {
+    removeBasketItemFromCloud(itemId, existing.store);
+  }
   renderBasket();
 }
 

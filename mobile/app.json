@@ -36,6 +36,7 @@
       "enabled": false
     },
     "extra": {
+      "functionsBaseUrl": "https://us-central1-basketbuddy-e6676.cloudfunctions.net",
       "router": {
         "origin": false
       },

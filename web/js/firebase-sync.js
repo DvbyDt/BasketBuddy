@@ -1,6 +1,8 @@
 // ─── Firebase + Firestore for BasketBuddy Web ───────────────────
 // Uses Firebase compat CDN (loaded via <script> tags in index.html)
-// Firestore collections: customItems, sharedBasket
+// Firestore collections (multi-tenant, per-user):
+//   users/{uid}/customItems/{itemId}
+//   users/{uid}/basket/{basketItemId}
 
 const firebaseConfig = {
   apiKey: 'AIzaSyBiT18T3LF9iopQsMdmeBN0BmGrHCCrxOU',
@@ -35,12 +37,16 @@ async function ensureWebAuth() {
   return _fbAuthReady;
 }
 
+function basketDocId(itemId, storeId) {
+  return `${itemId}_${storeId}`;
+}
+
 // ──── Custom Items Cloud Sync ────────────────────────────────────
 
 /** Push a custom item to Firestore */
 function syncCustomItemToCloud(item) {
   ensureWebAuth().then(uid => {
-    db.collection('customItems').doc(String(item.id)).set({
+    db.collection('users').doc(uid).collection('customItems').doc(String(item.id)).set({
       ...item,
       createdBy: uid,
       updatedAt: Date.now(),
@@ -50,18 +56,24 @@ function syncCustomItemToCloud(item) {
 
 /** Remove a custom item from Firestore */
 function removeCustomItemFromCloud(id) {
-  db.collection('customItems').doc(String(id)).delete()
-    .catch(e => console.warn('[Firestore] remove error:', e));
+  ensureWebAuth().then(uid => {
+    db.collection('users').doc(uid).collection('customItems').doc(String(id)).delete()
+      .catch(e => console.warn('[Firestore] remove error:', e));
+  });
 }
 
-/** Listen for real-time custom items from all users */
+/** Listen for current user's custom items */
 function subscribeToCustomItems(onChange) {
-  return db.collection('customItems').onSnapshot(snapshot => {
-    const cloudItems = snapshot.docs.map(d => d.data());
-    onChange(cloudItems);
-  }, err => {
-    console.warn('[Firestore] custom items listener error:', err);
+  let unsubscribe = null;
+  ensureWebAuth().then(uid => {
+    unsubscribe = db.collection('users').doc(uid).collection('customItems').onSnapshot(snapshot => {
+      const cloudItems = snapshot.docs.map(d => d.data());
+      onChange(cloudItems);
+    }, err => {
+      console.warn('[Firestore] custom items listener error:', err);
+    });
   });
+  return () => { try { if (unsubscribe) unsubscribe(); } catch(e) {} };
 }
 
 /** Replace saveCustomItems — now syncs to cloud */
@@ -95,7 +107,8 @@ function loadCustomItemsFromCloud() {
 
 function syncBasketItemToCloud(item) {
   ensureWebAuth().then(uid => {
-    db.collection('userBaskets').doc(uid).collection('items').doc(String(item.itemId || item.name)).set({
+    const docId = basketDocId(item.itemId, item.store);
+    db.collection('users').doc(uid).collection('basket').doc(docId).set({
       ...item,
       addedBy: uid,
       updatedAt: Date.now(),
@@ -103,28 +116,30 @@ function syncBasketItemToCloud(item) {
   });
 }
 
-function removeBasketItemFromCloud(itemId) {
+function removeBasketItemFromCloud(itemId, storeId) {
   ensureWebAuth().then(uid => {
-    db.collection('userBaskets').doc(uid).collection('items').doc(String(itemId)).delete()
+    db.collection('users').doc(uid).collection('basket').doc(basketDocId(itemId, storeId)).delete()
       .catch(e => console.warn('[Firestore] basket remove error:', e));
   });
 }
 
 function clearBasketInCloud() {
   ensureWebAuth().then(uid => {
-    db.collection('userBaskets').doc(uid).collection('items').get().then(snapshot => {
+    db.collection('users').doc(uid).collection('basket').get().then(snapshot => {
       snapshot.docs.forEach(d => d.ref.delete());
     }).catch(e => console.warn('[Firestore] basket clear error:', e));
   });
 }
 
 function subscribeToBasket(onChange) {
+  let unsubscribe = null;
   ensureWebAuth().then(uid => {
-    db.collection('userBaskets').doc(uid).collection('items').onSnapshot(snapshot => {
+    unsubscribe = db.collection('users').doc(uid).collection('basket').onSnapshot(snapshot => {
       const cloudBasket = snapshot.docs.map(d => d.data());
       onChange(cloudBasket);
     }, err => {
       console.warn('[Firestore] basket listener error:', err);
     });
   });
+  return () => { try { if (unsubscribe) unsubscribe(); } catch(e) {} };
 }

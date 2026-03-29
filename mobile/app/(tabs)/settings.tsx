@@ -22,7 +22,6 @@ import {
   onCustomItemsUpdate,
 } from '../../shared/store';
 import type { Store } from '../../shared/types';
-import AISettingsSection from '../../components/AISettingsSection';
 
 const STORES_STORAGE_KEY = 'basketbuddy_custom_stores';
 
@@ -138,7 +137,6 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
-      <AISettingsSection />
         <Text style={styles.headerTitle}>⚙️ Settings</Text>
 
         {/* ── Add Custom Item ────────────────────────────── */}

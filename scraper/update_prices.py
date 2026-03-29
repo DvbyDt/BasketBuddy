@@ -40,9 +40,17 @@ if not os.path.exists(CSV_FILE):
     print(f"❌ CSV file not found: {CSV_FILE}")
     sys.exit(1)
 
+REQUIRED_COLUMNS = {'Itemtom', 'Category', 'Quantity / Weight',
+                    'Asian Supermarket (€)', 'Lidl (€)', 'Super Value', 'Tesco (€)'}
+
 rows = []
 with open(CSV_FILE, newline='', encoding='utf-8-sig') as f:
     reader = csv.DictReader(f)
+    missing = REQUIRED_COLUMNS - set(reader.fieldnames or [])
+    if missing:
+        print(f"❌ CSV is missing columns: {missing}")
+        print(f"   Found columns: {list(reader.fieldnames or [])}")
+        sys.exit(1)
     for r in reader:
         rows.append(dict(r))
 
@@ -70,13 +78,9 @@ for r in rows:
     if not prices:
         continue
 
-    # Generate a 5-week synthetic price history (±5% ramp to current price)
-    history = {}
-    for sid, p in prices.items():
-        base = round(p * 0.95, 2)
-        h = [round(base + (p - base) * (i / 4), 2) for i in range(5)]
-        h[4] = p  # current week = exact CSV price
-        history[sid] = h
+    # Seed history with the current price only.
+    # Real history accumulates as unified_scraper.py runs over time.
+    history = {sid: [p] for sid, p in prices.items()}
 
     qty_display = qty if qty and qty != '-' else ''
 

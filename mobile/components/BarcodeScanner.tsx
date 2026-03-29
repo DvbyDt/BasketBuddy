@@ -2,26 +2,27 @@
  * BarcodeScanner.tsx — BasketBuddy MVP Feature
  *
  * HOW IT WORKS:
- * 1. expo-barcode-scanner reads EAN-13 barcode from camera (free)
+ * 1. expo-camera scans EAN-13 barcodes from camera (free, SDK 51+)
  * 2. We query Open Food Facts API (free, 3M+ products, no auth needed)
  *    → Returns: product name, brand, weight/quantity, categories
  * 3. We fuzzy-match the product name against your 91 data.json items
  * 4. Show matching item with all store prices → user taps + Add to basket
  *
  * COST: €0.00
- * SETUP: npx expo install expo-barcode-scanner
+ * SETUP: npx expo install expo-camera
  */
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   SafeAreaView, ActivityIndicator, Animated,
-  Vibration, Modal, ScrollView,
+  Vibration, Modal,
+  ScrollView
 } from 'react-native';
-import { BarCodeScanner } from 'expo-barcode-scanner';
+import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { COLORS, SHADOWS, RADIUS, FONTS, SPACING } from '../shared/theme';
 import { items, stores, getItemPrices, fmt, getCheapestStore } from '../shared/store';
-import { StoreBadge } from './StoreBadge';
+import { StoreBadge } from '../components/StoreBadge';
 import { useBasket } from '../shared/BasketContext';
 import type { Item } from '../shared/types';
 
@@ -75,7 +76,7 @@ function matchToLocalItems(product: OFFProduct): { item: Item; score: number }[]
     ...brand.split(/\W+/).filter(w => w.length > 2),
   ]);
 
-  const scores = items.map((item: Item) => {
+  const scores = items.map(item => {
     const itemWords = new Set(
       (item.name + ' ' + (item.quantity || '')).toLowerCase().split(/\W+/).filter(w => w.length > 2)
     );
@@ -97,7 +98,7 @@ interface Props {
 }
 
 export default function BarcodeScanner({ onClose }: Props) {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  // permission handled by useCameraPermissions hook
   const [scanned, setScanned]             = useState(false);
   const [loading, setLoading]             = useState(false);
   const [result, setResult]               = useState<{
@@ -111,12 +112,8 @@ export default function BarcodeScanner({ onClose }: Props) {
   const successAnim = useRef(new Animated.Value(0)).current;
   const { addToBasket, isInBasket } = useBasket();
 
-  // Request camera permission
-  useEffect(() => {
-    BarCodeScanner.requestPermissionsAsync().then(({ status }) => {
-      setHasPermission(status === 'granted');
-    });
-  }, []);
+  // Request camera permission using expo-camera hook
+  const [permission, requestPermission] = useCameraPermissions();
 
   // Pulse animation for scan frame
   useEffect(() => {
@@ -171,7 +168,7 @@ export default function BarcodeScanner({ onClose }: Props) {
 
   // ── Permission states ────────────────────────────────────────────
 
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.permissionView}>
@@ -182,7 +179,7 @@ export default function BarcodeScanner({ onClose }: Props) {
     );
   }
 
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.permissionView}>
@@ -191,8 +188,11 @@ export default function BarcodeScanner({ onClose }: Props) {
           <Text style={styles.permissionText}>
             Allow camera access in Settings to use barcode scanning.
           </Text>
-          <TouchableOpacity style={[styles.btn, { marginTop: 20 }]} onPress={onClose}>
-            <Text style={styles.btnText}>Go Back</Text>
+          <TouchableOpacity style={[styles.btn, { marginTop: 16 }]} onPress={requestPermission}>
+            <Text style={styles.btnText}>Grant Camera Access</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.btn, { marginTop: 10, backgroundColor: 'transparent', borderWidth: 2, borderColor: COLORS.border }]} onPress={onClose}>
+            <Text style={[styles.btnText, { color: COLORS.text }]}>Go Back</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -204,15 +204,15 @@ export default function BarcodeScanner({ onClose }: Props) {
   return (
     <View style={styles.container}>
       {/* Camera */}
-      <BarCodeScanner
-        onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barCodeTypes={[
-          BarCodeScanner.Constants.BarCodeType.ean13,
-          BarCodeScanner.Constants.BarCodeType.ean8,
-          BarCodeScanner.Constants.BarCodeType.upc_a,
-          BarCodeScanner.Constants.BarCodeType.upc_e,
-        ]}
+      <CameraView
         style={StyleSheet.absoluteFillObject}
+        facing="back"
+        barcodeScannerSettings={{
+          barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39'],
+        }}
+        onBarcodeScanned={scanned ? undefined : (result: BarcodeScanningResult) => {
+          handleBarCodeScanned({ type: result.type, data: result.data });
+        }}
       />
 
       {/* Dark overlay with scan hole */}
@@ -270,23 +270,28 @@ export default function BarcodeScanner({ onClose }: Props) {
           <View style={styles.sheet}>
             <View style={styles.sheetHandle} />
 
-            {result?.notFound || (result && !result.product) ? (
+            {/* Null checks to prevent error */}
+            {result?.notFound || !result?.product ? (
               <NotFoundView barcode={result?.barcode ?? ''} onRetry={resetScanner} onClose={onClose} />
-            ) : result?.matches.length === 0 ? (
-              <NoMatchView
-                product={result.product!}
-                onRetry={resetScanner}
-                onClose={onClose}
-              />
+            ) : result?.matches?.length === 0 ? (
+              result?.product ? (
+                <NoMatchView
+                  product={result.product}
+                  onRetry={resetScanner}
+                  onClose={onClose}
+                />
+              ) : null
             ) : (
-              <MatchView
-                product={result!.product!}
-                matches={result!.matches}
-                isInBasket={isInBasket}
-                onAdd={handleAddToBasket}
-                onScanAgain={resetScanner}
-                onClose={onClose}
-              />
+              result?.product && result?.matches ? (
+                <MatchView
+                  product={result.product}
+                  matches={result.matches}
+                  isInBasket={isInBasket}
+                  onAdd={handleAddToBasket}
+                  onScanAgain={resetScanner}
+                  onClose={onClose}
+                />
+              ) : null
             )}
           </View>
         </View>
@@ -349,7 +354,7 @@ function MatchView({ product, matches, isInBasket, onAdd, onScanAgain, onClose }
             )}
 
             <View style={styles.priceList}>
-              {prices.map((p: { store: any; price: number }, i: number) => {
+              {prices.map((p, i) => {
                 const isBest   = i === 0;
                 const inBasket = isInBasket(item.id, p.store.id);
                 return (

@@ -81,7 +81,7 @@ export function BasketProvider({ children }: { children: ReactNode }) {
 
   const removeFromBasket = (itemId: number, storeId: string) => {
     setBasket(prev => prev.filter(b => !(b.itemId === itemId && b.store === storeId)));
-    removeBasketItemFromCloud(itemId);
+    removeBasketItemFromCloud(itemId, storeId);
   };
 
   const clearBasket = () => {

@@ -15,8 +15,9 @@ const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
 export interface ScannedItem {
   name: string;
-  price: number;       // total line price (unit price × quantity)
-  quantity: number;    // number of units (default 1)
+  price: number;      // total line price (unit price × quantity)
+  unitPrice: number;  // price per single unit
+  quantity: number;   // number of units (default 1)
   isDiscount: boolean;
 }
 
@@ -87,7 +88,7 @@ export async function scanReceiptLocal(
           role: 'system',
           content:
             'You are a receipt parser. Output ONLY a raw JSON object — no markdown, no explanation, no text before or after. ' +
-            'Format: {"items":[{"name":"string","price":number,"quantity":number,"isDiscount":boolean}]}',
+            'Format: {"items":[{"name":"string","unitPrice":number,"quantity":number,"price":number,"isDiscount":boolean}]}',
         },
         {
           role: 'user',
@@ -99,14 +100,30 @@ export async function scanReceiptLocal(
             {
               type: 'text',
               text:
-                'Read this receipt and extract every line item.\n\n' +
-                'Rules:\n' +
-                '- Each purchased product → isDiscount: false, price = TOTAL line price, quantity = number of units bought\n' +
-                '- Discount/saving/clubcard/offer lines → isDiscount: true, price as positive number, quantity: 1\n' +
-                '- EXCLUDE: store name, address, date/time, subtotal, TOTAL, VAT, cash tendered, card payment, receipt number, loyalty points, thank you\n' +
-                '- Fix OCR noise: "1.S9"→1.59, "€2,99"→2.99, "Ml1k"→"Milk"\n' +
-                '- Short clean names: "Whole Milk 2L" not "WHL MLK 2LTR IRSH"\n' +
-                '- If quantity is not shown, default to 1\n\n' +
+                'Read this receipt image carefully and extract every purchased item.\n\n' +
+
+                'QUANTITY PATTERNS — receipts show multiples in two ways:\n' +
+                '  PATTERN A (Aldi): The quantity line comes BEFORE the item name:\n' +
+                '    "2 x  1.29"\n' +
+                '    "746222 HIGH PROTEIN NOODL  2.58"\n' +
+                '    → name: "High Protein Noodles", quantity: 2, unitPrice: 1.29, price: 2.58\n\n' +
+                '  PATTERN B (Lidl/Tesco): The quantity line comes AFTER the item name:\n' +
+                '    "High Protein Wraps  8.10"\n' +
+                '    "  6 x 1.35"\n' +
+                '    → name: "High Protein Wraps", quantity: 6, unitPrice: 1.35, price: 8.10\n\n' +
+                '  PATTERN C (single item): Just a name and price — no quantity line:\n' +
+                '    "Romaine Lettuce  0.99"\n' +
+                '    → name: "Romaine Lettuce", quantity: 1, unitPrice: 0.99, price: 0.99\n\n' +
+
+                'FIELDS:\n' +
+                '  name       — clean readable product name (fix OCR noise: "Ml1k"→"Milk", "1.S9"→1.59)\n' +
+                '  unitPrice  — price for ONE unit\n' +
+                '  quantity   — number of units purchased (integer, default 1)\n' +
+                '  price      — total for this line = unitPrice × quantity\n' +
+                '  isDiscount — true ONLY for discount/saving/clubcard/offer lines\n\n' +
+
+                'EXCLUDE: store name, address, date, time, subtotal, TOTAL, VAT, cash, card payment, receipt number, loyalty points, thank you messages.\n\n' +
+
                 'Return ONLY the JSON object, nothing else.',
             },
           ],
@@ -136,12 +153,18 @@ export async function scanReceiptLocal(
   }
 
   const items = (parsed.items ?? [])
-    .map((it: any) => ({
-      name:       String(it.name ?? '').trim(),
-      price:      Math.abs(Number(it.price) || 0),
-      quantity:   Math.max(1, Math.round(Number(it.quantity) || 1)),
-      isDiscount: Boolean(it.isDiscount),
-    }))
+    .map((it: any) => {
+      const quantity  = Math.max(1, Math.round(Number(it.quantity) || 1));
+      const unitPrice = Math.abs(Number(it.unitPrice) || Number(it.price) || 0);
+      const price     = Math.abs(Number(it.price) || unitPrice * quantity);
+      return {
+        name:       String(it.name ?? '').trim(),
+        unitPrice,
+        quantity,
+        price,
+        isDiscount: Boolean(it.isDiscount),
+      };
+    })
     .filter((it: ScannedItem) => it.name.length > 0 && it.price > 0);
 
   if (items.length === 0) {

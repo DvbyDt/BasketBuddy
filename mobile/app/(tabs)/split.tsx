@@ -14,13 +14,14 @@
  *   5. Summary — who owes what, discounts split proportionally
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, TextInput, FlatList, ScrollView,
-  TouchableOpacity, StyleSheet, SafeAreaView,
+  TouchableOpacity, StyleSheet,
   Alert, Modal, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Image, Animated,
+  ActivityIndicator, Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { COLORS, SHADOWS, RADIUS, FONTS, SPACING } from '../../shared/theme';
 import { fmt } from '../../shared/store';
@@ -285,7 +286,7 @@ export default function SplitScreen() {
   // ── Render ───────────────────────────────────────────────────────
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
 
       {/* Header */}
       <View style={styles.header}>
@@ -441,13 +442,13 @@ function CaptureStep({ scanning, scanStatus, scanStep, imageUri, onCamera, onGal
 
         {/* Pipeline steps */}
         <View style={styles.pipeline}>
-          <PipelineStep icon="📷" label="Captured"  done={scanStep >= 1} active={scanStep === 1} />
+          <PipelineStep icon="📷" label="Captured"   done={scanStep >= 1} active={scanStep === 1} />
           <View style={styles.pipelineLine} />
-          <PipelineStep icon="🔍" label="OCR.space" done={scanStep >= 2} active={scanStep === 2} />
+          <PipelineStep icon="🤖" label="Groq Vision" done={scanStep >= 2} active={scanStep === 2} />
           <View style={styles.pipelineLine} />
-          <PipelineStep icon="🤖" label="Groq AI"   done={scanStep >= 3} active={scanStep === 3} />
+          <PipelineStep icon="✅" label="Parsing"     done={scanStep >= 3} active={scanStep === 3} />
         </View>
-        <Text style={styles.freeLabel}>100% Free · OCR.space + Groq</Text>
+        <Text style={styles.freeLabel}>Powered by Groq Vision AI</Text>
       </View>
     );
   }
@@ -995,7 +996,7 @@ const styles = StyleSheet.create({
   discountBoxRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderTopWidth: 1, borderTopColor: '#BBF7D0' },
   discountBoxName: { fontSize: 13, fontWeight: FONTS.medium, color: COLORS.text, flex: 1 },
   discountBoxPrice: { fontSize: 13, fontWeight: FONTS.bold, color: COLORS.green },
-  assignFooter: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: COLORS.card, padding: 16, borderTopWidth: 1, borderTopColor: COLORS.border },
+  assignFooter: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: COLORS.card, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, borderTopWidth: 1, borderTopColor: COLORS.border },
   unassignedWarn: { fontSize: 13, fontWeight: FONTS.semibold, color: '#D97706', textAlign: 'center', marginBottom: 8 },
   footerBtns: { flexDirection: 'row', gap: 10 },
 
@@ -1009,7 +1010,7 @@ const styles = StyleSheet.create({
   summaryLine: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderTopWidth: 1, borderTopColor: COLORS.border },
   summaryLineName: { fontSize: 13, fontWeight: FONTS.medium, color: COLORS.text, flex: 1, marginRight: 8 },
   summaryLinePrice: { fontSize: 13, fontWeight: FONTS.semibold, color: COLORS.text },
-  grandCard: { backgroundColor: '#1E1B4B', borderRadius: 16, padding: 18, marginBottom: 16, gap: 8 },
+  grandCard: { backgroundColor: COLORS.primaryDark, borderRadius: 16, padding: 18, marginBottom: 16, gap: 8 },
   grandRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   grandLabel: { fontSize: 14, fontWeight: FONTS.medium, color: 'rgba(255,255,255,0.65)' },
   grandValue: { fontSize: 15, fontWeight: FONTS.bold, color: '#fff' },

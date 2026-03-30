@@ -2,6 +2,19 @@
 // Single source of truth for all visual tokens.
 // Every color, shadow, radius and animation lives here.
 
+import { Dimensions } from 'react-native';
+
+// ── Responsive scale ─────────────────────────────────────────────
+// rs(size) linearly interpolates from a 390px design reference.
+// Use for font sizes, padding, and icon sizes that should scale with
+// the device width rather than staying fixed.
+const BASE_W = 390; // iPhone 15 Pro / design reference
+
+export function rs(size: number): number {
+  const { width } = Dimensions.get('window');
+  return Math.round(size * (width / BASE_W));
+}
+
 export const COLORS = {
   // ── Brand ─────────────────────────────────────────────────────
   primary:      '#2D6A4F',   // Deep forest green — trust + savings

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Modal,
+  StyleSheet, StatusBar, Modal,
 } from 'react-native';
-import { COLORS, SHADOWS, RADIUS, FONTS, SPACING } from '../../shared/theme';
-import { getBestDeals, searchItems, loadCustomItems, Item } from '../../shared/store';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { COLORS, RADIUS, FONTS, SPACING } from '../../shared/theme';
+import { getBestDeals, searchItems, loadCustomItems } from '../../shared/store';
 import { PriceCard } from '../../components/PriceCard';
 import BarcodeScanner from '../../components/BarcodeScanner';
 
@@ -19,11 +20,10 @@ const TRENDING = [
 
 const CompareScreen = () => {
   const [query, setQuery]               = useState('');
-  const [ready, setReady]               = useState(false);
   const [showScanner, setShowScanner]   = useState(false);
 
   useEffect(() => {
-    loadCustomItems().then(() => setReady(true));
+    loadCustomItems();
   }, []);
 
   const isSearching = query.length > 0;
@@ -31,7 +31,7 @@ const CompareScreen = () => {
   const bestDeals   = getBestDeals(10);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="light-content" />
 
       {/* Header */}
@@ -77,7 +77,7 @@ const CompareScreen = () => {
       {/* Content */}
       <FlatList
         style={styles.content}
-        contentContainerStyle={{ paddingBottom: 20, paddingTop: 4 }}
+        contentContainerStyle={{ paddingBottom: 32, paddingTop: 4 }}
         data={isSearching ? results : bestDeals}
         keyExtractor={item => String(item.id)}
         ListHeaderComponent={

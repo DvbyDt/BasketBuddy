@@ -5,9 +5,9 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SHADOWS } from '../../shared/theme';
 import { items, stores, getStoreById, fmt } from '../../shared/store';
 import { StoreBadge } from '../../components/StoreBadge';
@@ -92,7 +92,7 @@ export default function BasketScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>🧺 My Basket</Text>
@@ -114,7 +114,7 @@ export default function BasketScreen() {
       ) : (
         <FlatList
           style={styles.list}
-          contentContainerStyle={{ paddingBottom: 32 }}
+          contentContainerStyle={{ paddingBottom: 40 }}
           data={basket}
           keyExtractor={item => `${item.itemId}-${item.store}`}
           renderItem={({ item: b }) => {
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
 
   // Optimizer card
   optimizerCard: {
-    backgroundColor: '#1E1B4B',
+    backgroundColor: COLORS.primaryDark,
     borderRadius: 18,
     padding: 18,
     gap: 12,
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
 
   // Store group inside optimizer
   storeGroup: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.10)',
     borderRadius: 12,
     padding: 12,
     gap: 6,
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
-  storeGroupName: { color: '#E0D4F7', fontWeight: '800', fontSize: 14 },
+  storeGroupName: { color: '#C8E6C9', fontWeight: '800', fontSize: 14 },
   storeGroupTotal: { color: '#fff', fontWeight: '800', fontSize: 15 },
 
   // Per-item row inside store group

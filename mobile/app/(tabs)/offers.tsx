@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, Alert, RefreshControl,
+  StyleSheet, Alert, RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SHADOWS, RADIUS, FONTS, SPACING } from '../../shared/theme';
 import { items, getStoreById, fmt } from '../../shared/store';
 import {
@@ -81,7 +82,7 @@ export default function OffersScreen() {
   // ── Shimmer loading state ────────────────────────────────────────
   if (loadState === 'loading') {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.headerBar}>
           <Text style={styles.headerTitle}>🏷️ Weekly Offers</Text>
           <Text style={styles.headerSub}>Checking for deals…</Text>
@@ -96,7 +97,7 @@ export default function OffersScreen() {
   // ── Empty state — no offers found by scraper ─────────────────────
   if (!hasOffers()) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.headerBar}>
           <Text style={styles.headerTitle}>🏷️ Weekly Offers</Text>
         </View>
@@ -194,7 +195,7 @@ export default function OffersScreen() {
 
       <ScrollView
         style={styles.content}
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl

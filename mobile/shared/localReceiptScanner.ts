@@ -123,20 +123,25 @@ export async function scanReceiptLocal(
                 '  → quantity:1, unitPrice:0.99, price:0.99\n\n' +
 
                 '━━ CLUBCARD / LOYALTY DISCOUNTS (TESCO "Cc" LINES) ━━\n' +
-                'Tesco shows item-level Clubcard savings as two lines immediately AFTER the item:\n' +
+                'A Cc discount ONLY applies when the VERY NEXT line(s) after an item are:\n' +
+                '  1. A line starting with "Cc" (e.g. "Cc €4.50" or "Cc 69c") — the saving label\n' +
+                '  2. Immediately followed by a NEGATIVE number (e.g. -4.50 or -0.30)\n' +
+                'Example:\n' +
                 '  "1  Dove Body Wash 720ml  9.00"   ← full shelf price\n' +
-                '  "   Cc 4.50"                       ← Clubcard saving label\n' +
-                '  "                        -4.50"    ← the actual deduction\n' +
-                'RULE: Subtract the Cc saving from the item above and emit ONE item at the NET price.\n' +
-                '  → name:"Dove Body Wash 720ml", price:4.50, unitPrice:4.50, isDiscount:false\n' +
-                'Do NOT emit the "Cc" line or the negative deduction as a separate item.\n\n' +
+                '  "   Cc 4.50"                       ← Clubcard saving label (starts with Cc)\n' +
+                '  "                        -4.50"    ← negative deduction\n' +
+                'RULE: Subtract the deduction from the item above → emit ONE item at NET price (4.50).\n' +
+                'Do NOT emit the "Cc" line or the negative line as separate items.\n\n' +
 
-                'SAME RULE for any other named item-level promotions/offers that appear as a\n' +
-                'negative line directly under a specific item — merge into the item net price.\n\n' +
+                'CRITICAL — DO NOT confuse Cc discounts with normal items:\n' +
+                '  "1  Tesco Easy Cook Brown Rice 1kg   1.30"  ← this is a NORMAL item at €1.30\n' +
+                '  The line does NOT start with "Cc" so it is NOT a discount — include it.\n' +
+                '  A negative number (e.g. -0.30) that appears several lines LATER belongs to a\n' +
+                '  different item (the one it directly follows), NOT to the Brown Rice.\n\n' +
 
                 '━━ BILL-LEVEL DISCOUNTS ━━\n' +
-                'If a discount line is NOT attached to a specific item (e.g. a coupon that reduces\n' +
-                'the whole bill), emit it as: isDiscount:true, price:abs(amount), quantity:1.\n\n' +
+                'If a discount line is NOT directly under a specific item (e.g. a coupon or\n' +
+                'a global "Savings:" total line), emit it as: isDiscount:true, price:abs(amount).\n\n' +
 
                 '━━ FIELDS ━━\n' +
                 '  name       — clean product name (fix OCR noise: "Ml1k"→"Milk")\n' +

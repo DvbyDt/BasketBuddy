@@ -81,7 +81,7 @@ export async function scanReceiptLocal(
     },
     body: JSON.stringify({
       model: VISION_MODEL,
-      max_tokens: 1500,
+      max_tokens: 2000,
       temperature: 0.1,
       messages: [
         {
@@ -102,27 +102,57 @@ export async function scanReceiptLocal(
               text:
                 'Read this receipt image carefully and extract every purchased item.\n\n' +
 
-                'QUANTITY PATTERNS — receipts show multiples in two ways:\n' +
-                '  PATTERN A (Aldi): The quantity line comes BEFORE the item name:\n' +
-                '    "2 x  1.29"\n' +
-                '    "746222 HIGH PROTEIN NOODL  2.58"\n' +
-                '    → name: "High Protein Noodles", quantity: 2, unitPrice: 1.29, price: 2.58\n\n' +
-                '  PATTERN B (Lidl/Tesco): The quantity line comes AFTER the item name:\n' +
-                '    "High Protein Wraps  8.10"\n' +
-                '    "  6 x 1.35"\n' +
-                '    → name: "High Protein Wraps", quantity: 6, unitPrice: 1.35, price: 8.10\n\n' +
-                '  PATTERN C (single item): Just a name and price — no quantity line:\n' +
-                '    "Romaine Lettuce  0.99"\n' +
-                '    → name: "Romaine Lettuce", quantity: 1, unitPrice: 0.99, price: 0.99\n\n' +
+                '━━ QUANTITY PATTERNS ━━\n' +
+                'PATTERN A (Aldi) — quantity line BEFORE item name:\n' +
+                '  "2 x  1.29"\n' +
+                '  "746222 HIGH PROTEIN NOODL  2.58"\n' +
+                '  → quantity:2, unitPrice:1.29, price:2.58\n\n' +
 
-                'FIELDS:\n' +
-                '  name       — clean readable product name (fix OCR noise: "Ml1k"→"Milk", "1.S9"→1.59)\n' +
-                '  unitPrice  — price for ONE unit\n' +
-                '  quantity   — number of units purchased (integer, default 1)\n' +
-                '  price      — total for this line = unitPrice × quantity\n' +
-                '  isDiscount — true ONLY for discount/saving/clubcard/offer lines\n\n' +
+                'PATTERN B (Lidl) — quantity line AFTER item name:\n' +
+                '  "High Protein Wraps  8.10"\n' +
+                '  "  6 x 1.35"\n' +
+                '  → quantity:6, unitPrice:1.35, price:8.10\n\n' +
 
-                'EXCLUDE: store name, address, date, time, subtotal, TOTAL, VAT, cash, card payment, receipt number, loyalty points, thank you messages.\n\n' +
+                'PATTERN C (Tesco) — quantity NUMBER prefix on same line, unit price on next line:\n' +
+                '  "2  Tesco Salad Tomatoes 6 Pack  2.58"\n' +
+                '  "   1.29 each"\n' +
+                '  → quantity:2, unitPrice:1.29, price:2.58\n\n' +
+
+                'PATTERN D (single item) — no quantity indicator:\n' +
+                '  "1  Romaine Lettuce  0.99"  OR  "Romaine Lettuce  0.99"\n' +
+                '  → quantity:1, unitPrice:0.99, price:0.99\n\n' +
+
+                '━━ CLUBCARD / LOYALTY DISCOUNTS (TESCO "Cc" LINES) ━━\n' +
+                'A Cc discount ONLY applies when the VERY NEXT line(s) after an item are:\n' +
+                '  1. A line starting with "Cc" (e.g. "Cc €4.50" or "Cc 69c") — the saving label\n' +
+                '  2. Immediately followed by a NEGATIVE number (e.g. -4.50 or -0.30)\n' +
+                'Example:\n' +
+                '  "1  Dove Body Wash 720ml  9.00"   ← full shelf price\n' +
+                '  "   Cc 4.50"                       ← Clubcard saving label (starts with Cc)\n' +
+                '  "                        -4.50"    ← negative deduction\n' +
+                'RULE: Subtract the deduction from the item above → emit ONE item at NET price (4.50).\n' +
+                'Do NOT emit the "Cc" line or the negative line as separate items.\n\n' +
+
+                'CRITICAL — DO NOT confuse Cc discounts with normal items:\n' +
+                '  "1  Tesco Easy Cook Brown Rice 1kg   1.30"  ← this is a NORMAL item at €1.30\n' +
+                '  The line does NOT start with "Cc" so it is NOT a discount — include it.\n' +
+                '  A negative number (e.g. -0.30) that appears several lines LATER belongs to a\n' +
+                '  different item (the one it directly follows), NOT to the Brown Rice.\n\n' +
+
+                '━━ BILL-LEVEL DISCOUNTS ━━\n' +
+                'If a discount line is NOT directly under a specific item (e.g. a coupon or\n' +
+                'a global "Savings:" total line), emit it as: isDiscount:true, price:abs(amount).\n\n' +
+
+                '━━ FIELDS ━━\n' +
+                '  name       — clean product name (fix OCR noise: "Ml1k"→"Milk")\n' +
+                '  unitPrice  — price for ONE unit AFTER any item-level Clubcard discount\n' +
+                '  quantity   — integer, default 1\n' +
+                '  price      — unitPrice × quantity (the NET amount actually charged)\n' +
+                '  isDiscount — true ONLY for bill-level discount lines\n\n' +
+
+                'EXCLUDE: store name, address, VAT number, date/time, Subtotal, TOTAL, Savings,\n' +
+                'Promotions totals, cash/card payment lines, receipt numbers, loyalty points balance,\n' +
+                'thank-you messages, barcode numbers.\n\n' +
 
                 'Return ONLY the JSON object, nothing else.',
             },

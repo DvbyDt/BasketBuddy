@@ -19,7 +19,7 @@ import {
   View, Text, TextInput, FlatList, ScrollView,
   TouchableOpacity, StyleSheet,
   Alert, Modal, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Image,
+  ActivityIndicator, Image, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -811,6 +811,21 @@ function SummaryStep({ people, summary, receiptItems, onBack, onReset }: {
 }) {
   const { totals, grandTotal, totalDiscounts, subtotal } = summary;
 
+  const handleShare = () => {
+    const lines: string[] = ['🧾 BasketBuddy Receipt Split\n'];
+    people.forEach((p, i) => {
+      lines.push(`${p.emoji} ${p.name}: €${totals[i].toFixed(2)}`);
+      const myItems   = receiptItems.filter(it => !it.isDiscount && it.assignedTo === i);
+      const halfItems = receiptItems.filter(it => !it.isDiscount && it.assignedTo === -1);
+      myItems.forEach(it => lines.push(`   ${it.name} — €${it.price.toFixed(2)}`));
+      halfItems.forEach(it => lines.push(`   ½ ${it.name} — €${(it.price / people.length).toFixed(2)}`));
+      lines.push('');
+    });
+    lines.push(`Total paid: €${grandTotal.toFixed(2)}`);
+    if (totalDiscounts > 0) lines.push(`Savings: -€${totalDiscounts.toFixed(2)}`);
+    Share.share({ message: lines.join('\n') });
+  };
+
   return (
     <ScrollView style={styles.stepContent} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
       <Text style={styles.summaryTitle}>💸 Here's who owes what</Text>
@@ -872,7 +887,12 @@ function SummaryStep({ people, summary, receiptItems, onBack, onReset }: {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.btnBack} onPress={onBack}>
+      {/* Share row */}
+      <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
+        <Text style={styles.shareBtnText}>📤 Share split with group</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={[styles.btnBack, { marginTop: 10 }]} onPress={onBack}>
         <Text style={styles.btnBackText}>← Edit assignments</Text>
       </TouchableOpacity>
       <TouchableOpacity style={[styles.btnPrimary, { marginTop: 10 }]} onPress={onReset}>
@@ -1017,6 +1037,14 @@ const styles = StyleSheet.create({
   grandFinal: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 10, marginTop: 4 },
   grandFinalLabel: { fontSize: 16, fontWeight: FONTS.semibold, color: '#fff' },
   grandFinalValue: { fontSize: 24, fontWeight: FONTS.black, color: '#fff' },
+  shareBtn: {
+    backgroundColor: COLORS.accent,
+    borderRadius: 12,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  shareBtnText: { color: '#fff', fontWeight: FONTS.bold, fontSize: 15 },
 
   // Shared
   btnPrimary: { backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 15, alignItems: 'center' },

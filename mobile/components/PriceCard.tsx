@@ -1,6 +1,5 @@
-import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Item, getCheapestStore, getItemPrices, fmt, getSavings } from '../shared/store';
+import { Item, getCheapestStore, getItemPrices, fmt, fmtPerUnit, getSavings } from '../shared/store';
 import { StoreBadge } from './StoreBadge';
 import { COLORS, SHADOWS } from '../shared/theme';
 import { useBasket } from '../shared/BasketContext';
@@ -12,7 +11,7 @@ interface Props {
   showAllPrices?: boolean;
 }
 
-export function PriceCard({ item, onPress, showAllPrices = false }: Props) {
+export function PriceCard({ item, onPress }: Props) {
   const { addToBasket, removeFromBasket, isInBasket, getQuantity, updateQuantity } = useBasket();
   const cheapest = getCheapestStore(item);
   const saving = getSavings(item);
@@ -87,6 +86,14 @@ export function PriceCard({ item, onPress, showAllPrices = false }: Props) {
                       </View>
                     )}
                   </View>
+                  {/* Price per 100g/ml — only shown when quantity is parseable */}
+                  {(() => {
+                    const effectivePrice = bestOffer ? bestOffer.discountedPrice : p.price;
+                    const perUnit = fmtPerUnit(effectivePrice, item.quantity ?? '');
+                    return perUnit ? (
+                      <Text style={styles.perUnit}>{perUnit}</Text>
+                    ) : null;
+                  })()}
                   {/* Offer label below price */}
                   {bestOffer && (
                     <View style={styles.offerTag}>
@@ -197,6 +204,12 @@ const styles = StyleSheet.create({
   priceAmount: { fontSize: 15, fontWeight: '800', color: COLORS.text },
   cheapestPrice: { color: COLORS.green },
   expensivePrice: { color: COLORS.red },
+  perUnit: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.muted,
+    marginTop: 1,
+  },
   priceStruck: {
     fontSize: 12,
     fontWeight: '600',

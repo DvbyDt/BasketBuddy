@@ -122,37 +122,38 @@ export async function scanReceiptLocal(
                 '  "1  Romaine Lettuce  0.99"  OR  "Romaine Lettuce  0.99"\n' +
                 '  → quantity:1, unitPrice:0.99, price:0.99\n\n' +
 
-                '━━ CLUBCARD / LOYALTY DISCOUNTS (TESCO "Cc" LINES) ━━\n' +
-                'A Cc discount ONLY applies when the VERY NEXT line(s) after an item are:\n' +
-                '  1. A line starting with "Cc" (e.g. "Cc €4.50" or "Cc 69c") — the saving label\n' +
-                '  2. Immediately followed by a NEGATIVE number (e.g. -4.50 or -0.30)\n' +
-                'Example:\n' +
+                '━━ INLINE DISCOUNTS (Tesco "Cc", Lidl/Aldi offer lines) ━━\n' +
+                'Supermarkets show item-level discounts as 1–2 lines directly after the item:\n' +
                 '  "1  Dove Body Wash 720ml  9.00"   ← full shelf price\n' +
-                '  "   Cc 4.50"                       ← Clubcard saving label (starts with Cc)\n' +
+                '  "   Cc 4.50"                       ← Clubcard saving label\n' +
                 '  "                        -4.50"    ← negative deduction\n' +
-                'RULE: Subtract the deduction from the item above → emit ONE item at NET price (4.50).\n' +
-                'Do NOT emit the "Cc" line or the negative line as separate items.\n\n' +
+                'RULE: The ONLY thing to emit is ONE item at the NET price (9.00 − 4.50 = 4.50).\n' +
+                '  → name:"Dove Body Wash 720ml", price:4.50, unitPrice:4.50, isDiscount:false\n' +
+                'The "Cc" label line and the negative line are NOT separate items — do not emit them.\n\n' +
 
-                'CRITICAL — DO NOT confuse Cc discounts with normal items:\n' +
-                '  "1  Tesco Easy Cook Brown Rice 1kg   1.30"  ← this is a NORMAL item at €1.30\n' +
-                '  The line does NOT start with "Cc" so it is NOT a discount — include it.\n' +
-                '  A negative number (e.g. -0.30) that appears several lines LATER belongs to a\n' +
-                '  different item (the one it directly follows), NOT to the Brown Rice.\n\n' +
+                'CRITICAL — DO NOT confuse a normal item price with a Cc discount:\n' +
+                '  "1  Tesco Easy Cook Brown Rice 1kg   1.30"  ← NORMAL item at €1.30, include it.\n' +
+                '  A "Cc" discount only follows an item if the VERY NEXT LINE starts with "Cc".\n' +
+                '  A negative value that appears several lines later belongs to the item IT follows.\n\n' +
 
-                '━━ BILL-LEVEL DISCOUNTS ━━\n' +
-                'If a discount line is NOT directly under a specific item (e.g. a coupon or\n' +
-                'a global "Savings:" total line), emit it as: isDiscount:true, price:abs(amount).\n\n' +
+                '━━ BOTTOM-OF-RECEIPT SUMMARY LINES — ALWAYS EXCLUDE ━━\n' +
+                'Receipts print a savings summary at the bottom AFTER all items. These are NOT items.\n' +
+                'NEVER emit any of these as items or discounts — they are already reflected in net prices:\n' +
+                '  "Subtotal:", "Savings:", "Promotions:", "TOTAL:", "Total savings:", "You saved:"\n' +
+                'Example: "Savings: -€9.30" is a summary of Cc discounts already merged into items.\n' +
+                'Emitting it would double-count the discount and make the split total wrong.\n\n' +
 
                 '━━ FIELDS ━━\n' +
                 '  name       — clean product name (fix OCR noise: "Ml1k"→"Milk")\n' +
-                '  unitPrice  — price for ONE unit AFTER any item-level Clubcard discount\n' +
+                '  unitPrice  — price for ONE unit AFTER any inline discount\n' +
                 '  quantity   — integer, default 1\n' +
-                '  price      — unitPrice × quantity (the NET amount actually charged)\n' +
-                '  isDiscount — true ONLY for bill-level discount lines\n\n' +
+                '  price      — unitPrice × quantity (net amount charged for this line)\n' +
+                '  isDiscount — always false; every line you emit IS a purchased item at its net price\n\n' +
 
                 'EXCLUDE: store name, address, VAT number, date/time, Subtotal, TOTAL, Savings,\n' +
-                'Promotions totals, cash/card payment lines, receipt numbers, loyalty points balance,\n' +
-                'thank-you messages, barcode numbers.\n\n' +
+                'Promotions, "You saved", cash/card payment lines, receipt numbers,\n' +
+                'loyalty points balance, thank-you messages, barcode numbers,\n' +
+                'any negative-only lines (they are already merged into the item above).\n\n' +
 
                 'Return ONLY the JSON object, nothing else.',
             },
@@ -182,6 +183,10 @@ export async function scanReceiptLocal(
     );
   }
 
+  // Summary-line keywords that should never appear as items.
+  // If the model emits them despite instructions, drop them here.
+  const SUMMARY_KEYWORDS = /^(subtotal|total|savings|promotions|you saved|vat|card|cash|clubcard points)/i;
+
   const items = (parsed.items ?? [])
     .map((it: any) => {
       const quantity  = Math.max(1, Math.round(Number(it.quantity) || 1));
@@ -192,10 +197,16 @@ export async function scanReceiptLocal(
         unitPrice,
         quantity,
         price,
-        isDiscount: Boolean(it.isDiscount),
+        // Always false — all inline discounts are merged into net item price.
+        // The split screen has no discounts to double-apply.
+        isDiscount: false as const,
       };
     })
-    .filter((it: ScannedItem) => it.name.length > 0 && it.price > 0);
+    .filter((it: ScannedItem) =>
+      it.name.length > 0 &&
+      it.price > 0 &&
+      !SUMMARY_KEYWORDS.test(it.name)  // drop any summary lines the model leaked through
+    );
 
   if (items.length === 0) {
     console.error('[Scanner] Parsed but no items found. Raw output:', text);

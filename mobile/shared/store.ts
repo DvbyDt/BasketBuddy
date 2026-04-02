@@ -85,6 +85,45 @@ export function fmt(price: number): string {
   return `€${price.toFixed(2)}`;
 }
 
+/**
+ * Parse a quantity string like "500g", "1kg", "2L", "330ml", "6 pack"
+ * and return { amount, unit } normalised to grams or millilitres.
+ * Returns null if the string can't be parsed.
+ */
+export function parseQuantity(qty: string): { amount: number; unit: 'g' | 'ml' } | null {
+  if (!qty) return null;
+  const s = qty.toLowerCase().replace(/\s+/g, '');
+
+  // kg → g
+  const kg = s.match(/^([\d.]+)kg$/);
+  if (kg) return { amount: parseFloat(kg[1]) * 1000, unit: 'g' };
+
+  // g
+  const g = s.match(/^([\d.]+)g$/);
+  if (g) return { amount: parseFloat(g[1]), unit: 'g' };
+
+  // L / litre → ml
+  const L = s.match(/^([\d.]+)l(itre)?s?$/);
+  if (L) return { amount: parseFloat(L[1]) * 1000, unit: 'ml' };
+
+  // ml
+  const ml = s.match(/^([\d.]+)ml$/);
+  if (ml) return { amount: parseFloat(ml[1]), unit: 'ml' };
+
+  return null;
+}
+
+/**
+ * Return a formatted price-per-unit string, e.g. "€0.24/100g" or "€0.15/100ml".
+ * Returns empty string if quantity can't be parsed or price is 0.
+ */
+export function fmtPerUnit(price: number, quantity: string): string {
+  const q = parseQuantity(quantity);
+  if (!q || q.amount <= 0 || price <= 0) return '';
+  const per100 = (price / q.amount) * 100;
+  return `€${per100.toFixed(2)}/100${q.unit}`;
+}
+
 export function getCheapestStore(item: Item): { store: Store; price: number } | null {
   let best: { store: Store; price: number } | null = null;
   for (const s of stores) {

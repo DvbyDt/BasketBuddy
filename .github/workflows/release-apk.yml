@@ -1,91 +1,109 @@
-name: Release Android APK
+name: Build & Release Android APK
 
 on:
-  schedule:
-    - cron: '0 0 */2 * *' # Every 2 days at midnight
+  # Manual trigger from GitHub UI → Actions → "Build & Release Android APK" → Run workflow
   workflow_dispatch:
+  # Auto-build whenever mobile code changes on main
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'   # only rebuild when the app itself changes, not docs/scraper
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  build-and-release:
     runs-on: ubuntu-latest
+    timeout-minutes: 60   # EAS free tier builds take ~15–25 min
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      # expo-github-action handles EAS CLI install + EXPO_TOKEN auth in one step
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
         with:
-          node-version: 20
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm install --legacy-peer-deps
 
-      - name: Get latest APK URL from EAS
-        id: get_apk
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        # Run from mobile/ so EAS can read app.config.js and identify the project
+      - name: Build APK via EAS (waits for completion)
+        id: build
         working-directory: mobile
         run: |
-          echo "Fetching latest Android build..."
-          BUILD_JSON=$(eas build:list \
+          echo "🏗️  Submitting build to EAS..."
+          # --wait blocks until the build finishes on Expo's servers
+          # --json outputs the build object so we can extract the APK URL
+          BUILD_JSON=$(eas build \
             --platform android \
-            --status finished \
-            --limit 1 \
+            --profile preview \
             --non-interactive \
+            --wait \
             --json 2>/dev/null)
-          echo "Raw EAS response: $BUILD_JSON"
-          APK_URL=$(echo "$BUILD_JSON" | jq -r '.[0].artifacts.buildUrl // empty')
-          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id // empty')
-          APP_VERSION=$(echo "$BUILD_JSON" | jq -r '.[0].appVersion // empty')
+
+          echo "Raw EAS build output:"
+          echo "$BUILD_JSON"
+
+          APK_URL=$(echo "$BUILD_JSON"   | jq -r '.[0].artifacts.buildUrl // empty')
+          BUILD_ID=$(echo "$BUILD_JSON"  | jq -r '.[0].id // empty')
+          APP_VER=$(echo "$BUILD_JSON"   | jq -r '.[0].appVersion // empty')
 
           if [ -z "$APK_URL" ]; then
-            echo "❌ No finished APK build found in EAS."
-            echo "   Trigger an EAS build first: eas build --platform android --profile preview"
+            echo "❌ Build finished but no APK URL found — check EAS dashboard"
             exit 1
           fi
 
-          echo "apk_url=$APK_URL" >> "$GITHUB_OUTPUT"
+          echo "✅ APK ready: $APK_URL"
+          echo "apk_url=$APK_URL"   >> "$GITHUB_OUTPUT"
           echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
-          echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
-          echo "✅ Found APK: $APK_URL"
+          echo "app_version=$APP_VER" >> "$GITHUB_OUTPUT"
 
       - name: Download APK
         run: |
-          curl -L -o BasketBuddy.apk "${{ steps.get_apk.outputs.apk_url }}"
-          ls -lh BasketBuddy.apk
+          curl -L -o BasketBuddy.apk "${{ steps.build.outputs.apk_url }}"
+          echo "APK size: $(du -sh BasketBuddy.apk | cut -f1)"
 
-      - name: Create or Update GitHub Release
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_ID: ${{ steps.build.outputs.build_id }}
+          APP_VERSION: ${{ steps.build.outputs.app_version }}
         run: |
-          VERSION="v${{ steps.get_apk.outputs.app_version }}"
-          TAG_NAME="$VERSION"
+          VERSION="v${APP_VERSION}"
 
-          # Delete existing release if it exists
-          gh release delete "$TAG_NAME" --yes 2>/dev/null || true
-          git push origin --delete "$TAG_NAME" 2>/dev/null || true
+          # Write release notes to a temp file to avoid YAML/shell quoting issues
+          cat > release_notes.md << 'NOTES'
+          ## BasketBuddy Release
 
-          # Create new release
-          gh release create "$TAG_NAME" \
+          ### Install
+          Download **BasketBuddy.apk** below and open it on your Android device.
+          You may need to allow installs from unknown sources in Settings.
+
+          ### What's inside
+          - Compare grocery prices across Tesco, Lidl, Aldi, SuperValu and Asian Supermarket
+          - Smart basket — see which single store is cheapest for your whole shop
+          - Receipt splitter with Groq Vision AI (handles Clubcard discounts automatically)
+          - Price trend charts with 5-week history
+          - Weekly offer alerts
+          - Add custom items and stores
+          NOTES
+
+          # Append build link (needs variable expansion so outside the heredoc)
+          echo "" >> release_notes.md
+          echo "**EAS Build:** https://expo.dev/accounts/dvbydt/projects/basketbuddy/builds/${BUILD_ID}" >> release_notes.md
+
+          # Overwrite the release if it already exists for this version
+          gh release delete "$VERSION" --yes 2>/dev/null || true
+          git push origin --delete "$VERSION" 2>/dev/null || true
+
+          gh release create "$VERSION" \
             BasketBuddy.apk \
-            --title "BasketBuddy $VERSION" \
-            --notes "## BasketBuddy $VERSION
+            --title "BasketBuddy ${VERSION}" \
+            --notes-file release_notes.md
 
-          ### Download
-          Install the APK directly on your Android device.
-
-          ### What's included
-          - 🔍 Compare prices across 5 Dublin grocery stores
-          - 🧺 Smart basket with AI optimizer
-          - 🧾 Receipt splitter
-          - 📈 5-week price trends
-          - 🔥 Real-time cloud sync via Firebase
-          - ➕ Custom items & stores
-
-          **Build:** [${{ steps.get_apk.outputs.build_id }}](https://expo.dev/accounts/dvbydt/projects/basketbuddy/builds/${{ steps.get_apk.outputs.build_id }})"
-
-          echo "✅ Release created: $TAG_NAME"
+          echo "✅ GitHub Release created: $VERSION"

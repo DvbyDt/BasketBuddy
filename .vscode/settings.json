@@ -1,0 +1,18 @@
+{
+  "typescript.tsdk": "mobile/node_modules/typescript/lib",
+  "typescript.disableAutomaticTypeAcquisition": true,
+  "typescript.tsserver.watchOptions": {},
+  "search.exclude": {
+    "**/node_modules": true
+  },
+  "files.exclude": {
+    "**/node_modules": true
+  },
+  "typescript.preferences.includePackageJsonAutoImports": "off",
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}

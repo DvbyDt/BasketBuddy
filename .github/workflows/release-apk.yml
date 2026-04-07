@@ -37,21 +37,31 @@ jobs:
         working-directory: mobile
         run: |
           echo "🏗️  Submitting build to EAS..."
+          # Capture both stdout and stderr so no errors are silently swallowed
           # --wait blocks until the build finishes on Expo's servers
           # --json outputs the build object so we can extract the APK URL
+          set +e
           BUILD_JSON=$(eas build \
             --platform android \
             --profile preview \
             --non-interactive \
             --wait \
-            --json 2>/dev/null)
+            --json 2>&1)
+          EXIT_CODE=$?
+          set -e
 
           echo "Raw EAS build output:"
           echo "$BUILD_JSON"
 
-          APK_URL=$(echo "$BUILD_JSON"   | jq -r '.[0].artifacts.buildUrl // empty')
-          BUILD_ID=$(echo "$BUILD_JSON"  | jq -r '.[0].id // empty')
-          APP_VER=$(echo "$BUILD_JSON"   | jq -r '.[0].appVersion // empty')
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ EAS build command failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
+
+          # EAS --json returns an array; grab first element
+          APK_URL=$(echo "$BUILD_JSON" | jq -r 'if type=="array" then .[0].artifacts.buildUrl else .artifacts.buildUrl end // empty' 2>/dev/null)
+          BUILD_ID=$(echo "$BUILD_JSON" | jq -r 'if type=="array" then .[0].id else .id end // empty' 2>/dev/null)
+          APP_VER=$(echo "$BUILD_JSON"  | jq -r 'if type=="array" then .[0].appVersion else .appVersion end // empty' 2>/dev/null)
 
           if [ -z "$APK_URL" ]; then
             echo "❌ Build finished but no APK URL found — check EAS dashboard"

@@ -27,15 +27,24 @@ jobs:
         id: get_apk
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        # Run from mobile/ so EAS can read app.config.js and identify the project
+        working-directory: mobile
         run: |
           echo "Fetching latest Android build..."
-          BUILD_JSON=$(eas build:list --platform android --status finished --limit 1 --non-interactive --json 2>/dev/null)
-          APK_URL=$(echo "$BUILD_JSON" | jq -r '.[0].artifacts.buildUrl')
-          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
-          APP_VERSION=$(echo "$BUILD_JSON" | jq -r '.[0].appVersion')
+          BUILD_JSON=$(eas build:list \
+            --platform android \
+            --status finished \
+            --limit 1 \
+            --non-interactive \
+            --json 2>/dev/null)
+          echo "Raw EAS response: $BUILD_JSON"
+          APK_URL=$(echo "$BUILD_JSON" | jq -r '.[0].artifacts.buildUrl // empty')
+          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id // empty')
+          APP_VERSION=$(echo "$BUILD_JSON" | jq -r '.[0].appVersion // empty')
 
-          if [ -z "$APK_URL" ] || [ "$APK_URL" = "null" ]; then
-            echo "❌ No APK URL found"
+          if [ -z "$APK_URL" ]; then
+            echo "❌ No finished APK build found in EAS."
+            echo "   Trigger an EAS build first: eas build --platform android --profile preview"
             exit 1
           fi
 

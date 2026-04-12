@@ -54,23 +54,28 @@ jobs:
           echo "Raw EAS build output:"
           cat eas_output.txt
 
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "❌ EAS build command failed with exit code $EXIT_CODE"
-            exit $EXIT_CODE
-          fi
-
           # Extract only the JSON array (last [...] block) from the mixed output
+          # EAS CLI can exit non-zero for warnings (e.g. missing env vars) even
+          # when the build itself succeeded — so we check the JSON status, not exit code
           BUILD_JSON=$(grep -Pzo '\[[\s\S]*\]' eas_output.txt | tr -d '\0' || true)
 
           if [ -z "$BUILD_JSON" ]; then
-            echo "❌ Could not extract JSON from EAS output"
+            echo "❌ Could not extract JSON from EAS output (exit code: $EXIT_CODE)"
             exit 1
           fi
 
           # EAS --json returns an array; grab first element
-          APK_URL=$(echo "$BUILD_JSON" | jq -r '.[0].artifacts.buildUrl // empty')
-          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id // empty')
-          APP_VER=$(echo "$BUILD_JSON"  | jq -r '.[0].appVersion // empty')
+          BUILD_STATUS=$(echo "$BUILD_JSON" | jq -r '.[0].status // empty')
+          APK_URL=$(echo "$BUILD_JSON"      | jq -r '.[0].artifacts.buildUrl // empty')
+          BUILD_ID=$(echo "$BUILD_JSON"     | jq -r '.[0].id // empty')
+          APP_VER=$(echo "$BUILD_JSON"      | jq -r '.[0].appVersion // empty')
+
+          echo "Build status: $BUILD_STATUS"
+
+          if [ "$BUILD_STATUS" != "FINISHED" ]; then
+            echo "❌ Build did not finish successfully (status: $BUILD_STATUS)"
+            exit 1
+          fi
 
           if [ -z "$APK_URL" ]; then
             echo "❌ Build finished but no APK URL found — check EAS dashboard"

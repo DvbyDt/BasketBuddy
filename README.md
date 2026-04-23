@@ -303,5 +303,4 @@ gh workflow run scrape.yml --ref main
 ---
 
 ## License
-
 MIT

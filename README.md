@@ -12,6 +12,7 @@
 
 # BasketBuddy
 
+
 BasketBuddy is a grocery price comparison app built for Dublin shoppers. Compare prices across Tesco, Lidl, Aldi, SuperValu, and Asian Supermarket — then split receipts with housemates using Groq Vision AI that reads your actual receipt photo and handles Clubcard discounts automatically.
 
 Available as a **native Android APK** and an **installable PWA**, with real-time Firebase sync for custom items and baskets.

@@ -8,6 +8,7 @@
   <img src="https://img.shields.io/badge/Android-APK%20Ready-3DDC84?logo=android&logoColor=white&style=for-the-badge" alt="Android"/>
   <img src="https://img.shields.io/badge/PWA-Installable-5A0FC8?logo=pwa&logoColor=white&style=for-the-badge" alt="PWA"/>
   <img src="https://img.shields.io/github/license/DvbyDt/BasketBuddy?style=for-the-badge" alt="License"/>
+  
 </p>
 
 # BasketBuddy
